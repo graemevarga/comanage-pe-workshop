@@ -1,0 +1,30 @@
+# COmanage Registry PE 5.2.0 workshop: one container with everything inside
+# (Registry, PostgreSQL, Mailpit, job runner, workshop data and checkpoints).
+#
+#   docker compose up -d     then open https://localhost:8443/registry-pe/ and log in as "admin" (blank password)
+#   docker compose down      throws the container away; the next "up" starts fresh
+#
+# Ports are published on 127.0.0.1 only: with anonymous login, anyone who can reach them is an administrator.
+# Change ports or other settings in a .env file (see .env.example).
+name: comanage-pe-workshop
+
+services:
+  registry:
+    image: ${IMAGE:-ghcr.io/graemevarga/comanage-pe-workshop:5.2.0-1}
+    ports:
+      - "127.0.0.1:${HTTPS_PORT:-8443}:443"
+      - "127.0.0.1:${HTTP_PORT:-8080}:80"
+      - "127.0.0.1:${MAILPIT_PORT:-8025}:8025"
+    environment:
+      TZ: ${TZ:-America/Chicago}
+      DEBUG: ${DEBUG:-false}
+      # Used for the ready banner and for redirecting http:// to the published https:// port.
+      WORKSHOP_HTTPS_PORT: ${HTTPS_PORT:-8443}
+      WORKSHOP_MAILPIT_PORT: ${MAILPIT_PORT:-8025}
+    stop_grace_period: 30s
+    # Optional: keep the Registry database across "docker compose down" (see docs/participant-guide.md).
+    # volumes:
+    #   - registry-db:/var/lib/postgresql/data
+
+# volumes:
+#   registry-db: {}

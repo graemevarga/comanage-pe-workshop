@@ -1,0 +1,156 @@
+#!/bin/bash
+#
+# workshop - helper commands inside the COmanage Registry PE workshop container.
+# From the repository directory on your laptop:  docker compose exec registry workshop <command>
+set -euo pipefail
+
+CKPT_DIR=/opt/workshop/checkpoints
+STATE_FILE=/var/lib/workshop/current-checkpoint
+APP_DIR="${COMANAGE_REGISTRY_DIR}/app"
+DB="${COMANAGE_REGISTRY_DATABASE:-registry}"
+DB_USER="${COMANAGE_REGISTRY_DATABASE_USER:-registry_user}"
+URL="https://localhost/${COMANAGE_REGISTRY_WEBROOT}/"
+
+usage() {
+    cat <<USAGE
+Usage: workshop <command> [arguments]
+
+  list                       List the checkpoints in this container (* = last restored or saved)
+  status                     Show the processes, whether the Registry answers, and the last checkpoint
+  restore <name>             Replace the Registry database with checkpoint <name>, e.g. 04-filesource-synced
+  reset                      Same as "restore 01-fresh": back to the state the container started in
+  checkpoint <name> [text]   Save the current database as checkpoint <name> (instructors)
+  sync <co_id> <eis_id> [force]
+                             Full sync of External Identity Source <eis_id> in CO <co_id> (FileSource)
+  cake <arguments...>        Run bin/cake as www-data, e.g.: workshop cake plugin -a activate -p FileConnector
+  psql [arguments...]        Open psql on the Registry database
+  mail-test <person_id>      Email a Person's verified address (look for it in Mailpit)
+  logs [error|debug]         Follow the Registry log written by workshop commands and the job runner
+  help                       Show this help
+
+On your laptop, put "docker compose exec registry" in front of each command.
+USAGE
+}
+
+die() { echo "workshop: $*" >&2; exit 1; }
+
+# bin/cake as www-data. Without COMANAGE_REGISTRY_CONTAINER, CakePHP writes its debug/error logs to
+# local/logs/*.log instead of stdout, so command output stays readable ("workshop logs" shows them).
+as_www() {
+    (cd "${APP_DIR}" && env -u COMANAGE_REGISTRY_CONTAINER HOME=/var/www \
+        setpriv --reuid=www-data --regid=www-data --init-groups "$@")
+}
+
+registry_up() { curl -fsk -o /dev/null -A workshop-healthcheck "${URL}"; }
+
+wait_until_up() {
+    local i
+    for i in $(seq 1 90); do
+        registry_up && return 0
+        sleep 2
+    done
+    die "the Registry did not come back within 3 minutes; see: docker compose logs registry"
+}
+
+checkpoint_path() {
+    local name="${1%.dump}"
+    [[ "${name}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "invalid checkpoint name: ${1}"
+    echo "${CKPT_DIR}/${name}.dump"
+}
+
+cmd_list() {
+    local f name desc mark current
+    current=$(cat "${STATE_FILE}" 2>/dev/null || true)
+    shopt -s nullglob
+    local dumps=("${CKPT_DIR}"/*.dump)
+    if (( ${#dumps[@]} == 0 )); then
+        echo "No checkpoints in ${CKPT_DIR}."
+        return 0
+    fi
+    for f in "${dumps[@]}"; do
+        name=$(basename "${f}" .dump)
+        desc=""
+        if [[ -f "${CKPT_DIR}/${name}.txt" ]]; then desc=$(head -n 1 "${CKPT_DIR}/${name}.txt"); fi
+        mark=" "
+        if [[ "${name}" == "${current}" ]]; then mark="*"; fi
+        printf '%s %-26s %s\n' "${mark}" "${name}" "${desc}"
+    done
+}
+
+cmd_status() {
+    supervisorctl status || true
+    if registry_up; then
+        echo "Registry: answering at https://localhost:${WORKSHOP_HTTPS_PORT}/${COMANAGE_REGISTRY_WEBROOT}/"
+    else
+        echo "Registry: not answering yet"
+    fi
+    echo "Mailpit:  http://localhost:${WORKSHOP_MAILPIT_PORT}/"
+    echo "Last checkpoint restored or saved: $(cat "${STATE_FILE}" 2>/dev/null || echo unknown)"
+}
+
+cmd_checkpoint() {
+    [[ $# -ge 1 ]] || die "usage: workshop checkpoint <name> [description]"
+    local path name tmp
+    path=$(checkpoint_path "$1"); shift
+    name=$(basename "${path}" .dump)
+    tmp="${path}.tmp.$$"
+    pg_dump -h /run/postgresql -U postgres -Fc -d "${DB}" -f "${tmp}"
+    mv -f "${tmp}" "${path}"
+    if [[ $# -gt 0 ]]; then printf '%s\n' "$*" > "${CKPT_DIR}/${name}.txt"; fi
+    # On the instructor bind mount, hand the files to the directory's owner (the host user).
+    chown --reference="${CKPT_DIR}" "${path}" 2>/dev/null || true
+    if [[ -f "${CKPT_DIR}/${name}.txt" ]]; then chown --reference="${CKPT_DIR}" "${CKPT_DIR}/${name}.txt" 2>/dev/null || true; fi
+    echo "${name}" > "${STATE_FILE}"
+    echo "Saved checkpoint ${name} ($(du -h "${path}" | cut -f1)) to ${path}"
+}
+
+cmd_restore() {
+    [[ $# -eq 1 ]] || die "usage: workshop restore <name>   (see: workshop list)"
+    local path name
+    path=$(checkpoint_path "$1")
+    name=$(basename "${path}" .dump)
+    [[ -f "${path}" ]] || die "no checkpoint named ${name} (see: workshop list)"
+    echo "Restoring checkpoint ${name}; the Registry is unavailable for a few seconds..."
+    supervisorctl stop jobs apache2 > /dev/null || true
+    dropdb -h /run/postgresql -U postgres --if-exists --force "${DB}"
+    createdb -h /run/postgresql -U postgres -O "${DB_USER}" -E UTF8 -T template0 "${DB}"
+    pg_restore -h /run/postgresql -U postgres --exit-on-error --no-owner --no-privileges \
+        --role="${DB_USER}" -d "${DB}" "${path}"
+    # Existing sessions describe the database we just replaced: log everyone out.
+    find /tmp -maxdepth 1 -name 'sess_*' -delete 2> /dev/null || true
+    echo "${name}" > "${STATE_FILE}"
+    # Restarting Apache re-runs the entrypoint: schema check, setup no-op, cache clear.
+    supervisorctl start apache2 jobs > /dev/null || true
+    wait_until_up
+    echo "Restored ${name}. Reload the Registry in your browser and log in again if asked."
+}
+
+cmd_sync() {
+    local co="${1:-}" eis="${2:-}" force="${3:-}"
+    [[ "${co}" =~ ^[0-9]+$ && "${eis}" =~ ^[0-9]+$ ]] \
+        || die "usage: workshop sync <co_id> <external_identity_source_id> [force]"
+    local args=(job -c "${co}" -j CoreJob.SyncJob -s "external_identity_source_id=${eis}")
+    if [[ "${force}" == "force" ]]; then args+=("force=1"); fi
+    as_www ./bin/cake "${args[@]}"
+}
+
+cmd="${1:-help}"
+shift || true
+case "${cmd}" in
+    list)       cmd_list ;;
+    status)     cmd_status ;;
+    checkpoint) cmd_checkpoint "$@" ;;
+    restore)    cmd_restore "$@" ;;
+    reset)      cmd_restore 01-fresh ;;
+    sync)       cmd_sync "$@" ;;
+    cake)       as_www ./bin/cake "$@" ;;
+    psql)       exec psql -h /run/postgresql -U "${DB_USER}" -d "${DB}" "$@" ;;
+    mail-test)  [[ "${1:-}" =~ ^[0-9]+$ ]] || die "usage: workshop mail-test <person_id>"
+                as_www ./bin/cake test -t mail --recipient "$1" ;;
+    logs)       log="${COMANAGE_REGISTRY_DIR}/local/logs/cli-${1:-error}.log"
+                [[ "${1:-error}" =~ ^(error|debug)$ ]] || die "usage: workshop logs [error|debug]"
+                touch "${log}" && chown www-data:www-data "${log}"
+                exec tail -n 50 -F "${log}" ;;
+    help|-h|--help) usage ;;
+    *)          usage >&2; exit 2 ;;
+esac

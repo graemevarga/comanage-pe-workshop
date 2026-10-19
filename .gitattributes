@@ -1,0 +1,4 @@
+# Keep LF everywhere: the image's shell scripts and CSV files break with CRLF (Windows checkouts).
+* text=auto eol=lf
+*.dump binary
+*.png binary

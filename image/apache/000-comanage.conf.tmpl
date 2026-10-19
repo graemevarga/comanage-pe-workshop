@@ -1,0 +1,60 @@
+# COmanage Registry PE workshop virtual hosts.
+# Rendered at build time: @WEBROOT@ becomes COMANAGE_REGISTRY_WEBROOT (default "registry-pe").
+#
+# Mirrors the vhost that upstream's comanage_utils.sh generates, with three workshop changes:
+#   - login uses mod_authn_anon: ANY username is accepted (password may be blank) and becomes REMOTE_USER;
+#   - UseCanonicalName Off and no HSTS, so the app works behind any localhost port mapping;
+#   - plain HTTP redirects to the published HTTPS port (WORKSHOP_HTTPS_PORT) instead of :443.
+# Apache does not allow a comment on the same line as a directive.
+
+<VirtualHost *:80>
+  ServerName localhost
+  UseCanonicalName Off
+  Header set Content-Security-Policy "frame-ancestors 'self';"
+  RewriteEngine On
+  RewriteRule ^ https://%{SERVER_NAME}:${WORKSHOP_HTTPS_PORT}%{REQUEST_URI} [R=302,L]
+</VirtualHost>
+
+<VirtualHost *:443>
+  ServerName localhost
+  UseCanonicalName Off
+  Header set Content-Security-Policy "frame-ancestors 'self';"
+
+  SSLEngine on
+  SSLProtocol all -SSLv2 -SSLv3
+  SSLCipherSuite EECDH+AESGCM:EDH+AESGCM:AES256+EECDH:AES256+EDH
+  SSLHonorCipherOrder on
+  SSLCertificateFile /etc/apache2/cert.pem
+  SSLCertificateKeyFile /etc/apache2/privkey.pem
+
+  DocumentRoot /var/www/html
+  RedirectMatch ^/$ /@WEBROOT@/
+
+  LogFormat "%a %h %l %u %t \"%r\" %>s %O \"%{Referer}i\" \"%{User-Agent}i\"" combined
+  LogLevel warn
+  SetEnvIf User-Agent "^workshop-healthcheck" dontlog
+  ErrorLog ${APACHE_LOG_DIR}/error.log
+  CustomLog ${APACHE_LOG_DIR}/access.log combined env=!dontlog
+
+  <Directory /var/www/html/@WEBROOT@>
+    Options Indexes FollowSymLinks
+    DirectoryIndex index.php
+    AllowOverride All
+    Require all granted
+  </Directory>
+
+  # Workshop login (auth/login/login.php copies REMOTE_USER into the session).
+  # Any username is accepted and the password may be blank; "admin" is the platform administrator.
+  # Never publish this port beyond 127.0.0.1.
+  <Directory /var/www/html/@WEBROOT@/auth/login>
+    AuthType Basic
+    AuthName "COmanage workshop: type any username, leave the password blank"
+    AuthBasicProvider anon
+    Anonymous *
+    Anonymous_NoUserID Off
+    Anonymous_MustGiveEmail Off
+    Anonymous_VerifyEmail Off
+    Anonymous_LogEmail Off
+    Require valid-user
+  </Directory>
+</VirtualHost>

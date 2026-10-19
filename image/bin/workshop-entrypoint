@@ -1,0 +1,33 @@
+#!/bin/bash
+#
+# Runs upstream's COmanage Registry 5.2.0 container entrypoint (comanage_utils.sh, unmodified)
+# with two workshop fixes, then execs "$@" (apache2-foreground under supervisord, or "true" at build time).
+#
+# Upstream's sequence: write local/config/database.php once, prepare Apache (ports.conf, ServerName,
+# enable 000-comanage), wait for the database, run "bin/cake database" (idempotent schema sync) and
+# "bin/cake setup" (aborts harmlessly once the COmanage CO exists), write the salt file, clear caches.
+
+source /usr/local/lib/comanage_utils.sh
+
+# Fix 1: show the startup output in the container log. (Upstream sends it to /dev/null unless
+# COMANAGE_DEBUG is set, which would also force DEBUG=true.)
+OUTPUT=/dev/stdout
+
+# Fix 2: v5 keeps TMP, CACHE and LOGS under local/ (app/config/paths.php), but upstream's
+# tmp_ownership() chowns app/tmp. The steps above run bin/cake as root, so without this the cache
+# files they create stay root-owned and break www-data.
+function comanage_utils::tmp_ownership() {
+    chown -R www-data:www-data "${COMANAGE_REGISTRY_DIR}/local/tmp" "${COMANAGE_REGISTRY_DIR}/local/logs"
+    echo "Recursively set ownership of local/tmp and local/logs to www-data" > "$OUTPUT"
+}
+
+# Fix 3: at runtime the schema and the COmanage CO already exist (built into the image, or restored
+# from a checkpoint by "workshop restore"), so skip upstream's re-run of "bin/cake database" and
+# "bin/cake setup". In 5.2.0 the schema re-run is not idempotent: for the CoreAssigner plugin it tries
+# to DROP INDEX format_assigner_sequences_i1, which backs a constraint, and logs an error on every start.
+# Set WORKSHOP_SCHEMA_SYNC=1 to run them anyway (e.g. with a database volume from an older image).
+if [[ "${1:-}" != "true" && "${WORKSHOP_SCHEMA_SYNC:-0}" != "1" ]]; then
+    export COMANAGE_REGISTRY_SKIP_SETUP=1
+fi
+
+comanage_utils::exec_apache_http_server "$@"

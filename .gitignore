@@ -1,0 +1,4 @@
+.research/
+.env
+/tools/seed/out/
+__pycache__/
