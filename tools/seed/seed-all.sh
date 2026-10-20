@@ -2,7 +2,7 @@
 #
 # Walk through the workshop procedures on a fresh kit and save a checkpoint after each stage (instructors).
 #
-#   tools/seed/seed-all.sh [FIRST_STAGE]     e.g. "tools/seed/seed-all.sh 05" redoes 05 and 06 only
+#   tools/seed/seed-all.sh [FIRST_STAGE]     e.g. "tools/seed/seed-all.sh 05" redoes 05 to 07 only
 #
 # Starts from what participants get ("./workshop reset": empty database, upstream setup, then the workshop-setup
 # step), or from the checkpoint saved before FIRST_STAGE, then for each stage drives the UI with Playwright
@@ -47,5 +47,12 @@ fi
 if stage_wanted 06; then
     ui 06
     ./workshop checkpoint 06-enrollment "Discovery TNG: self-signup flow 'Join Discovery TNG' (email verification through Mailpit, login identifier from the username, COU arbovirus) and its message templates"
+fi
+if stage_wanted 07; then
+    # Provisioning and invitations, built on the FileSource state of 04; topics.py checks every step as it goes
+    # (it runs on the host and needs python3).
+    ./workshop restore 04-filesource-synced
+    python3 tools/seed/topics.py all
+    ./workshop checkpoint 07-provisioning-invitation "Redcurrant University (from 04): SqlConnector active; provisioning targets File Export (provisioned/output.jsonl) and SQL Export (target database), Immediate; Ruth Spence in CO:admins; invitation flow 'Invite a Member' and its templates; Casey Invitee enrolled by invitation (plus the test petitions of the trap checks). Restoring it doesn't restore output.jsonl or the target database."
 fi
 ./workshop list

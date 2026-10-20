@@ -134,7 +134,8 @@ Verified working:
    (N is the job's id, which counts every job in the Registry, so it is rarely 1). The
    underlying command is
    `docker compose exec -u www-data -w /srv/comanage-registry/app registry ./bin/cake job -c 3 -j CoreJob.SyncJob -s external_identity_source_id=1`
-   (always as www-data). Show the result under **Operations → Jobs** and **People → My Population**.
+   (always as www-data). Show the result under **Operations → Jobs** (open the job: the list only says "Started via
+   JobCommand"; the job's own page has "Sync Finished ...") and **People → My Population**.
 5. One record at a time in the UI: **External Identity Sources → HR File → Search Source**, search `Spence`, click
    the SORID → the retrieved record (raw CSV row included) → **Sync Record to CO** ("External Identity Source sync
    complete").

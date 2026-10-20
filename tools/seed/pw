@@ -1,6 +1,7 @@
 #!/bin/bash
 # Run a seeder script in the Playwright container, on the workshop's compose network.
 # Usage: tools/seed/pw SCRIPT.py [args...]   (env: BASE, OUT, REG_USER are passed through)
+# Headless only: the container has no display, and a headed browser hangs on clicks and screenshots.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 docker image inspect cpw-seed:1.64.0 > /dev/null 2>&1 || docker build -q -t cpw-seed:1.64.0 "${here}" > /dev/null

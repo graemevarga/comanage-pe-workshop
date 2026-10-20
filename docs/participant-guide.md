@@ -140,6 +140,9 @@ it runs.
   (firewalld, ufw, or rules added by other software) may be blocking traffic between containers. Restart Docker
   (`sudo systemctl restart docker`) so it re-creates its firewall rules, then `docker compose up --wait`; if that
   doesn't help, see Docker's [packet filtering and firewalls](https://docs.docker.com/engine/network/packet-filtering-firewalls/).
+  One case seen on Debian 13: an old iptables-legacy firewall with a DROP policy, left by other software, still
+  filters container traffic (`sudo iptables-legacy -L FORWARD` shows `policy DROP`). If nothing on your machine
+  relies on it, `sudo iptables-legacy -P FORWARD ACCEPT` restores the default; otherwise ask whoever manages it.
 - **Downloads fail** (for example "denied" or a timeout from `ghcr.io`): a VPN or corporate proxy may block GitHub's
   container registry. Try again off the VPN or on another network.
 - **Apple Silicon: "The requested image's platform (linux/amd64) does not match the detected host platform"**:

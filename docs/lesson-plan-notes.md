@@ -53,8 +53,9 @@ Only a few things need a terminal. These forms work in macOS Terminal, Windows P
 | Look at the SQL Provisioner's tables | `docker compose exec target-database psql -U target_user -d target`, then `\dt` and `select * from <table>;` |
 | Start over from a fresh install | `docker compose down -v`, then `docker compose up --wait` |
 
-The sync prints the Registry's (very verbose) log; the result is in the CO under **Operations → Jobs**: "Sync
-Finished (45 new, 0 updated, 0 errors, 45 total)". The ids appear in the page addresses (`co_id=3`,
+The sync prints the Registry's (very verbose) log. To see the result, open the job in the CO under **Operations →
+Jobs** (the list itself only says "Started via JobCommand"): its summary reads "Sync Finished (45 new, 0 updated,
+0 errors, 45 total)". The ids appear in the page addresses (`co_id=3`,
 `external-identity-sources/edit/1`).
 
 ## FileSource in 5.2.0

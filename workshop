@@ -35,7 +35,7 @@ Usage: ./workshop <command> [arguments]
   sync <co_id> <eis_id> [force] [-v]
                              Full sync of External Identity Source <eis_id> in CO <co_id> (FileSource)
   cake <arguments...>        Run bin/cake in the registry container (as www-data)
-  mail-test <person_id>      Email a Person's verified address (look for it in Mailpit)
+  mail-test <person_id>      Email a Person's verified address (look for it in Mailpit); needs a verified address
   psql                       Open psql on the Registry database
   logs                       Follow the Registry's log
   checkpoint <name> [text]   Save the current database as a checkpoint (instructors)
@@ -191,6 +191,12 @@ case "${command}" in
     cake)       show docker compose exec -u www-data -w ${APP_DIR} registry ./bin/cake "$@"
                 exec docker compose exec -u www-data -w "${APP_DIR}" registry ./bin/cake "$@" ;;
     mail-test)  case "${1:-x}" in *[!0-9]*) die "usage: ./workshop mail-test <person_id>" ;; esac
+                # bin/cake test -t mail fails with a TypeError when the person has no verified address.
+                verified=$(docker compose exec -T registry-database psql -U "${DB_USER}" -d "${DB_NAME}" -Atqc \
+                    "select count(*) from email_addresses where person_id = $1 and verified
+                       and email_address_id is null and deleted is not true")
+                [ "${verified}" -gt 0 ] || die "person $1 has no verified email address. Add one (person page >" \
+                    "Email Addresses > Add) and press Force Verify, then try again."
                 show docker compose exec -u www-data -w ${APP_DIR} registry ./bin/cake test -t mail --recipient "$1"
                 docker compose exec -T -u www-data -w "${APP_DIR}" registry env -u COMANAGE_REGISTRY_CONTAINER \
                     ./bin/cake test -t mail --recipient "$1" ;;
