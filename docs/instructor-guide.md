@@ -212,6 +212,7 @@ make build                       # bake the new dumps into the image
 | `bin/cake job -r -c all` fails | The kit's job runner loops over CO ids for you |
 | Mail sent by command-line jobs has links without a host | Trigger mail from the UI |
 | Generate API Key regenerates on every visit | Copy the key from the first page |
+| Force Verify on an address that is already verified → HTTP 500 | Check the Verified column first |
 | A step that changes actor without a Handoff Message Template stops the flow | Always set one on approval steps |
 | A notification recipient without a verified email → HTTP 500 for the enrollee | Force-verify approvers' email first |
 | Basic credentials are cached by the browser | Private windows, or `127.0.0.1` vs `localhost`, per persona |

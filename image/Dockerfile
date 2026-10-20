@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1
+# check=skip=SecretsUsedInArgOrEnv
 #
 # COmanage Registry PE 5.2.0 - all-in-one workshop image
+# (The lint check above is skipped on purpose: the database password and salt are fixed demo values.)
 #
 #   Registry 5.2.0 (Apache + mod_php, anonymous Basic auth), PostgreSQL 15, Mailpit and a queued-job
 #   runner, supervised by supervisord. The database is initialised at build time, so a container is

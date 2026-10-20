@@ -28,6 +28,9 @@ Without cloning the repository:
 docker run -d --name comanage -p 127.0.0.1:8443:443 -p 127.0.0.1:8025:8025 ghcr.io/graemevarga/comanage-pe-workshop:5.2.0-1
 ```
 
+With `docker run`, the helper commands below are `docker exec comanage workshop ...` instead of
+`docker compose exec registry workshop ...`.
+
 ## Logging in
 
 Any username works with an empty password, and you become whoever that username belongs to: `admin` is the
