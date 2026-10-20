@@ -1,8 +1,9 @@
-# Build the workshop image natively for amd64 and arm64, push both by digest to GHCR, merge them into
-# one multi-architecture tag, then pull the published image on both architectures and smoke-test it.
+# Build the COmanage Registry 5.2.0 image exactly as the upstream release builds it (its own container/build.sh,
+# basic-auth variant, unmodified), push it to GHCR, then start the workshop's compose stack with it and check it.
 #
-# Release: push a tag such as v5.2.0-1  ->  ghcr.io/graemevarga/comanage-pe-workshop:5.2.0-1, :5.2.0, :latest
-# Test build: run the workflow by hand with an extra tag (for example 5.2.0-1-rc1); it does not move :latest.
+# Release: push a tag such as v5.2.0-1  ->  ghcr.io/graemevarga/comanage-registry:5.2.0-basic-auth-1
+#          (the number after the dash is upstream build.sh's tag suffix).
+# Manual run: rebuilds and re-pushes the suffix given as input.
 name: publish
 
 on:
@@ -10,13 +11,15 @@ on:
     tags: ['v*']
   workflow_dispatch:
     inputs:
-      tag:
-        description: Image tag to publish (for example 5.2.0-1-rc1)
+      suffix:
+        description: build.sh tag suffix (the image becomes comanage-registry:5.2.0-basic-auth-<suffix>)
         required: true
-        type: string
+        default: '1'
 
 env:
-  REGISTRY_IMAGE: ghcr.io/graemevarga/comanage-pe-workshop
+  REGISTRY_TAG: 5.2.0
+  REGISTRY_COMMIT: c5e9be6fddbd2b659d89741e2178edb95d5388f0
+  IMAGE_REPO: ghcr.io/graemevarga/comanage-registry
 
 permissions:
   contents: read
@@ -24,70 +27,33 @@ permissions:
 
 jobs:
   build:
-    strategy:
-      fail-fast: true
-      matrix:
-        include:
-          - platform: linux/amd64
-            runner: ubuntu-24.04
-          - platform: linux/arm64
-            runner: ubuntu-24.04-arm
-    runs-on: ${{ matrix.runner }}
-    steps:
-      - name: Prepare
-        run: |
-          platform='${{ matrix.platform }}'
-          echo "PLATFORM_PAIR=${platform//\//-}" >> "$GITHUB_ENV"
-
-      - uses: actions/checkout@v7
-
-      - name: Image labels
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ env.REGISTRY_IMAGE }}
-
-      - uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - uses: docker/setup-buildx-action@v4
-
-      - name: Build and push by digest
-        id: build
-        uses: docker/build-push-action@v7
-        with:
-          context: image
-          platforms: ${{ matrix.platform }}
-          labels: ${{ steps.meta.outputs.labels }}
-          outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
-
-      - name: Export digest
-        run: |
-          mkdir -p "${{ runner.temp }}/digests"
-          digest='${{ steps.build.outputs.digest }}'
-          touch "${{ runner.temp }}/digests/${digest#sha256:}"
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: digests-${{ env.PLATFORM_PAIR }}
-          path: ${{ runner.temp }}/digests/*
-          if-no-files-found: error
-          retention-days: 1
-
-  merge:
-    needs: build
     runs-on: ubuntu-24.04
     outputs:
-      version: ${{ steps.meta.outputs.version }}
+      image: ${{ steps.tag.outputs.image }}
     steps:
-      - uses: actions/download-artifact@v8
-        with:
-          path: ${{ runner.temp }}/digests
-          pattern: digests-*
-          merge-multiple: true
+      - name: Work out the tag suffix
+        id: tag
+        run: |
+          if [ "${GITHUB_EVENT_NAME}" = workflow_dispatch ]; then
+            suffix='${{ inputs.suffix }}'
+          else
+            suffix="${GITHUB_REF_NAME##*-}"
+          fi
+          case "${suffix}" in ''|*[!A-Za-z0-9._]*) echo "bad suffix '${suffix}'"; exit 1 ;; esac
+          echo "suffix=${suffix}" >> "$GITHUB_OUTPUT"
+          echo "image=${IMAGE_REPO}:${REGISTRY_TAG}-basic-auth-${suffix}" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch the upstream 5.2.0 release and check it is the tagged commit
+        run: |
+          curl -fsSL --retry 5 -o registry.tar.gz \
+            "https://github.internet2.edu/COmanage/registry/archive/refs/tags/${REGISTRY_TAG}.tar.gz"
+          test "$(gzip -dc registry.tar.gz | head -c 1536 | grep -a -o 'comment=[0-9a-f]*' | cut -d= -f2)" = "${REGISTRY_COMMIT}"
+          mkdir upstream
+          tar -xzf registry.tar.gz --strip-components=1 -C upstream
+
+      - name: Build with upstream's container/build.sh
+        working-directory: upstream
+        run: ./container/build.sh -s '${{ steps.tag.outputs.suffix }}' --label "${REGISTRY_TAG}" registry basic-auth
 
       - uses: docker/login-action@v4
         with:
@@ -95,71 +61,79 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/setup-buildx-action@v4
-
-      - name: Image tags
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ env.REGISTRY_IMAGE }}
-          flavor: latest=false
-          tags: |
-            type=match,pattern=v(.*),group=1
-            type=match,pattern=v(\d+\.\d+\.\d+),group=1
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
-            type=raw,value=${{ inputs.tag }},enable=${{ github.event_name == 'workflow_dispatch' }}
-
-      - name: Create the multi-architecture tags
-        working-directory: ${{ runner.temp }}/digests
+      - name: Push
         run: |
-          # word splitting is intended: one "-t TAG" pair per tag, one digest reference per platform
-          # shellcheck disable=SC2046
-          docker buildx imagetools create \
-            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.REGISTRY_IMAGE }}@sha256:%s ' *)
-
-      - name: Inspect
-        run: docker buildx imagetools inspect '${{ env.REGISTRY_IMAGE }}:${{ steps.meta.outputs.version }}'
+          # build.sh 5.2.0 ignores --image_registry/--repository, so tag the result for GHCR afterwards.
+          docker tag "comanage-registry:${REGISTRY_TAG}-basic-auth-${{ steps.tag.outputs.suffix }}" '${{ steps.tag.outputs.image }}'
+          docker push '${{ steps.tag.outputs.image }}'
 
   verify:
-    needs: merge
-    strategy:
-      fail-fast: false
-      matrix:
-        runner: [ubuntu-24.04, ubuntu-24.04-arm]
-    runs-on: ${{ matrix.runner }}
+    needs: build
+    runs-on: ubuntu-24.04
+    env:
+      REGISTRY_IMAGE: ${{ needs.build.outputs.image }}
     steps:
+      - uses: actions/checkout@v7
+
       - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Start the published image
+      - name: Start the stack (first start on an empty database)
         run: |
-          docker run -d --name cpw -p 127.0.0.1:8443:443 -p 127.0.0.1:8025:8025 \
-            '${{ env.REGISTRY_IMAGE }}:${{ needs.merge.outputs.version }}'
-          for _ in $(seq 1 60); do
-            [ "$(docker inspect -f '{{.State.Health.Status}}' cpw)" = healthy ] && break
-            sleep 3
+          docker compose up -d
+          for _ in $(seq 1 90); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' "$(docker compose ps -q registry)")" = healthy ] && break
+            sleep 5
           done
-          docker inspect -f '{{.State.Health.Status}}' cpw | grep -qx healthy || { docker logs cpw | tail -200; exit 1; }
-          uname -m
+          docker compose ps
 
       - name: Anonymous login, Mailpit, checkpoints
         run: |
           set -x
-          base=https://localhost:8443/registry-pe
+          base=https://localhost:8443/registry
           test "$(curl -ks -o /dev/null -w '%{http_code}' "$base/")" = 200
           test "$(curl -ks -o /dev/null -w '%{http_code}' "$base/auth/login/login.php")" = 401
           test "$(curl -ks -u admin: -o /dev/null -w '%{http_code}' "$base/auth/login/login.php")" = 302
           test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8025/)" = 200
-          docker exec cpw workshop list
-          docker exec cpw workshop restore 04-filesource-synced
-          test "$(docker exec cpw workshop psql -Atc "select count(*) from external_identities where external_identity_id is null and deleted is not true")" -ge 45
-          docker exec cpw workshop reset
+          ./workshop restore 04-filesource-synced
+          test "$(docker compose exec -T registry-database psql -U registry_user -d registry -Atc \
+            "select count(*) from people where co_id = 3 and person_id is null and deleted is not true")" = 45
+          ./workshop restore 06-enrollment
+          ./workshop mail-test 1
+          curl -s http://localhost:8025/api/v1/messages | grep -q 'TestCommand Test Message'
 
       - name: Logs on failure
         if: failure()
         run: |
-          docker logs cpw 2>&1 | grep -v ' debug: ' | tail -200
+          docker compose logs --no-color 2>&1 | grep -v ' debug: ' | tail -300
+
+  # Apple Silicon Macs run the amd64 registry image under emulation; QEMU on an arm64 runner is a slower stand-in.
+  verify-emulated:
+    needs: build
+    runs-on: ubuntu-24.04-arm
+    continue-on-error: true
+    env:
+      REGISTRY_IMAGE: ${{ needs.build.outputs.image }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-qemu-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Start the stack with an emulated registry container
+        run: |
+          docker compose up -d
+          for _ in $(seq 1 120); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' "$(docker compose ps -q registry)")" = healthy ] && break
+            sleep 10
+          done
+          docker compose ps
+          test "$(curl -ks -u admin: -o /dev/null -w '%{http_code}' https://localhost:8443/registry/auth/login/login.php)" = 302

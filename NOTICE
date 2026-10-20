@@ -3,18 +3,16 @@ Copyright 2026 The comanage-pe-workshop contributors
 
 Licensed under the Apache License, Version 2.0 (see LICENSE).
 
-The container image built from this repository redistributes third-party software, each under
-its own license:
+This repository does not include the COmanage Registry source; registry/slashRoot/.../000-comanage.conf is adapted
+from the virtual host that upstream's container entrypoint generates. The repository's workflow builds the upstream
+COmanage Registry 5.2.0 release (Apache-2.0) with the release's own container/build.sh, unmodified, and publishes
+the result as an unofficial build at ghcr.io/graemevarga/comanage-registry. That image, like any image built from
+the release, includes the official Docker "php" image (PHP License) on Debian bookworm with its packages under their
+own licenses, PHP extensions including PECL redis, and the Oracle Instant Client 21.14 (Oracle Free Use Terms and
+Conditions), which the release's Dockerfile downloads. The workshop also runs the official PostgreSQL (PostgreSQL
+License) and Mailpit (MIT) images. Upstream's NOTICE is reproduced below.
 
-  - COmanage Registry 5.2.0 (Apache-2.0), fetched from the upstream Internet2 tag at build time,
-    including its container entrypoint scripts comanage_utils.sh and docker-comanage-entrypoint,
-    which are used unmodified. Upstream's NOTICE is reproduced below.
-  - The official Docker "php" image (PHP License) on Debian bookworm, whose packages carry their
-    own licenses, including Apache HTTP Server (Apache-2.0), PostgreSQL 15 (PostgreSQL License)
-    and Supervisor (BSD-derived).
-  - Mailpit (MIT).
-
-The sample FileSource population in image/data/filesource/ (fictional people) is converted from
+The sample FileSource population in filesource/ (fictional people) is converted from
 the COmanage Registry v4 training materials by Shayna Atkinson
 (https://github.internet2.edu/satkinson/comanage-registry-training-ansible).
 

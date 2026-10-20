@@ -2,14 +2,17 @@
 
 How the workshop kit lines up with Laura Paglione's in-progress COmanage Registry PE v5.2 material (57 screenshots in
 `InCommon-Training/comanage-files/registry_v5.2`, read on 2026-10-19), and the questions to settle with her.
-Everything marked *verified* was checked against a running container built from this repository.
+Everything marked *verified* was checked against the running kit.
+
+The kit runs the 5.2.0 release as delivered (the image upstream's `container/build.sh` builds, PostgreSQL and Mailpit
+in their own containers, upstream's default settings), so participants can repeat everything at home. Its only
+customisation is anonymous login.
 
 ## Already matching (verified)
 
 | Her screenshots | The kit |
 |---|---|
 | Registry **5.2.0**, stock theme ("COmanage Registry v5.2.0" in the Configuration panel) | Built from the upstream 5.2.0 tag, unmodified |
-| App served at **`/registry-pe/`** | `https://localhost:8443/registry-pe/` (build argument `COMANAGE_REGISTRY_WEBROOT`) |
 | Platform admin logs in as **`admin`** | Username `admin`, blank password |
 | Five COs: COmanage, **Discovery TNG**, **Redcurrant University**, **Guests**, **MESS**, with her descriptions | Checkpoint `02-configuration`; the "Available Collaborations" page matches hers row for row |
 | Discovery TNG = CO 2, Redcurrant = **CO 3** (`co_3.hr_api_user`) | Same ids (COs are created in her order). Even Discovery TNG's "Campus" type is id **51** and its `CO:admins` group id **11**, as in hers |
@@ -24,6 +27,11 @@ Everything marked *verified* was checked against a running container built from 
 
 ## Questions for Laura
 
+0. **URL path.** Her instance serves the app at `/registry-pe/` (`comanage-demo.test.sphericalcloud.net/registry-pe/`);
+   the kit uses upstream's default, **`https://localhost:8443/registry/`**, because it runs the release as delivered.
+   Any text or screenshot that shows `/registry-pe/` will differ. (Changing the kit would mean rebuilding the image
+   with `COMANAGE_REGISTRY_WEBROOT=registry-pe`, which participants couldn't reproduce with the stock build.)
+
 1. **Is the HR source fed by the API (ApiConnector), by a file (FileSource), or both?**
    Her pipeline name and `co_3.hr_api_user` point to an API push exercise, while Benn asked for FileSource. The kit
    supports both (*verified*):
@@ -32,7 +40,7 @@ Everything marked *verified* was checked against a running container built from 
    - **API push**: activate ApiConnector; add an External Identity Source with plugin `ApiConnector.ApiSources`
      (status Manual, System of Record Label `hr`, pipeline "Process HR API Inputs"); add an API (Configuration > APIs)
      with plugin `ApiConnector.ApiSourceEndpoints` for `co_3.hr_api_user`, bound to that source; generate the key;
-     then `PUT https://localhost:8443/registry-pe/api/apisource/<id>/v2/sorPeople/hr/<SORID>` with a JSON body
+     then `PUT https://localhost:8443/registry/api/apisource/<id>/v2/sorPeople/hr/<SORID>` with a JSON body
      returned 201 (200 on repeat, 401 with a wrong key). See the instructor guide for the full example.
    Ask: which does the narrative use, in which chapter, and should the API exercise get its own checkpoint?
 
@@ -51,13 +59,15 @@ Everything marked *verified* was checked against a running container built from 
    administrator; any other name logs in as whoever has that login identifier, or as a new "authenticated user" with
    no COs (what self-signup needs). The kit also gives every HR person a login identifier from their `uid` (a
    PipelineToolkit flange), so `ruth.spence` lands on her own Redcurrant dashboard. Her "log in" steps need to say
-   "type admin, leave the password blank"; to switch persons use a private window or `https://127.0.0.1:8443/registry-pe/`.
+   "type admin, leave the password blank"; to switch persons use a private window or `https://127.0.0.1:8443/registry/`.
+   (Upstream's own basic-auth image, which participants will use at home, logs in `registry.admin` with an htpasswd
+   password instead.)
 
 5. **The user menu label.** Hers reads "admin" everywhere. In the kit some pages (the CO dashboard, for example) show
    **"Registry Admin"**, the name 5.2.0's setup gives the administrator Person. Cosmetic; it can be renamed if her
    screenshots must match exactly.
 
-6. **Full FileSource sync is command-line only** in 5.2.0: `docker compose exec registry workshop sync 3 1` prints
+6. **Full FileSource sync is command-line only** in 5.2.0: `./workshop sync 3 1` prints
    "Sync Finished (45 new, 0 updated, 0 errors, 45 total)". In the UI, External Identity Sources > HR File >
    Search Source > Retrieve > **Sync Record to CO** syncs one person at a time (*verified*). Which does she document?
 
@@ -65,17 +75,20 @@ Everything marked *verified* was checked against a running container built from 
    untouched), and "Role Status On Delete" never fires for role-less rows. Demonstrate departures by changing a role's
    status, as her Ruth Spence sequence already does.
 
-8. **Mail.** 5.2 ignores the container's email settings; the kit preconfigures Mailpit as the COmanage CO's Outgoing
-   SMTP Server (applies to every CO). Her enrollment chapter should send people to **http://localhost:8025** to read
-   mail. There are no Message Templates until someone creates them.
+8. **Mail.** 5.2 ignores the container's email settings, so a fresh install sends no mail until an Outgoing SMTP
+   Server is configured in the UI. In the kit that is the first exercise (Configuration → Servers: host `mailpit`,
+   port 1025, no TLS; then CO Settings), saved as checkpoint `01-email`. Does her material cover it? Her enrollment
+   chapter should send people to **http://localhost:8025** to read mail. There are no Message Templates until
+   someone creates them.
 
 9. **The enrollment chapter.** Her only enrollment screenshot is a blank "Add a New Enrollment Flow" form in
    Discovery TNG, so checkpoint `06-enrollment` is the kit's own design (see the checkpoint table in the README). Ask
    what flow her chapter builds; the checkpoint can be regenerated to match.
 
 10. **Values the kit had to choose** because her screenshots don't show them: the Principal Investigator type's
-    database value (`principal-investigator`), Access-wiki's description ("Access to the wiki"), and arbovirus's
-    description, which in hers is stored cut off ("...in Cambodi"); the kit uses "...in Cambodia".
+    database value (`principal-investigator`), Access-wiki's description ("Access to the wiki"), the SMTP server's
+    description ("Mailpit (workshop mail catcher)"), and arbovirus's description, which in hers reads "...in Cambodi";
+    the kit uses "...in Cambodia".
 
 11. **Time zones.** Her screens show America/New_York or America/Los_Angeles because the Registry uses the browser's
     time zone. Participants will see their own.

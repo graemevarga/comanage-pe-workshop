@@ -1,150 +1,85 @@
-# Design notes
+# How the workshop maps to a real deployment
 
-For maintainers of the workshop image: why it is built the way it is, and how to change it.
+The workshop runs the COmanage Registry PE **5.2.0 release as delivered**. This page lists every setting it uses, the
+upstream mechanism behind it, and what you would do differently in production. For building and running your own,
+see [Running it yourself](at-home.md).
 
-## Goals
+## The containers
 
-- One self-contained environment per laptop for a hands-on COmanage Registry PE workshop: Registry, database,
-  mail catcher, job runner, sample data and catch-up checkpoints, with nothing else to install.
-- Upstream Internet2 COmanage Registry **5.2.0** exactly as tagged (commit `c5e9be6fddbd2b659d89741e2178edb95d5388f0`),
-  with upstream's container entrypoint reused unmodified.
-- Benn Oshrin's specification: v5 Registry, PostgreSQL, Apache `AuthBasicProvider anon`, no Shibboleth, no LDAP,
-  FileSource fed by prepared files.
-- Runs natively on Apple Silicon Macs, Windows (Docker Desktop + WSL 2) and Intel/AMD Linux.
+| Service | What it is | Production equivalent |
+|---|---|---|
+| `registry` | The image `container/build.sh -s 1 --label 5.2.0 registry basic-auth` builds from the 5.2.0 release, unmodified (this repository's workflow runs exactly that and pushes the result to GHCR). Upstream's entrypoint (`docker-comanage-entrypoint` → `comanage_utils.sh`) writes `local/config/database.php` from the environment, prepares Apache, waits for the database, runs `bin/cake database` and `bin/cake setup`, clears caches, then starts Apache. | The same image (or the shibboleth-sp-supervisor / mod_auth_openidc variant) |
+| `registry-database` | Official `postgres:17`, data in the named volume `registry-database` | Your PostgreSQL service, backed up |
+| `mailpit` | Official Mailpit image, accepting any SMTP credentials without TLS | Your campus SMTP relay |
 
-## One image, supervisord as PID 1
+There is no job-runner container: 5.2.0's `build.sh` lists a `crond` product whose Dockerfile is missing from the
+release, and the workshop's chapters don't need queued jobs. In production, schedule
+`bin/cake job -r -c <co_id>` (and FileSource syncs) with cron, a Kubernetes CronJob or a small loop container
+running the same image.
 
-Everything runs in one container so a participant needs one `docker compose up -d` (or one `docker run`) and the
-state lives in one place. supervisord (the pattern upstream uses for its Shibboleth SP image) runs:
+## Registry settings (all upstream environment variables)
 
-| Program | What it is |
-|---|---|
-| `postgres` | PostgreSQL 15 from Debian bookworm, listening on 127.0.0.1 inside the container only |
-| `mailpit` | Mailpit: SMTP on 127.0.0.1:1025 inside the container, web UI on port 8025 |
-| `apache2` | `workshop-entrypoint apache2-foreground`: upstream's entrypoint, then Apache with mod_php |
-| `jobs` | `workshop-jobs`: every `JOB_INTERVAL` seconds (60), `bin/cake job -r -c <id> -m 100` for each active CO, as www-data |
+| Variable | Workshop value | Notes |
+|---|---|---|
+| `COMANAGE_REGISTRY_ADMIN_USERNAME`, `_GIVEN_NAME`, `_FAMILY_NAME` | `admin`, Registry, Admin | Used by `bin/cake setup` on the first start only. Upstream's default username is `registry.admin`; the course material uses `admin`. |
+| `COMANAGE_REGISTRY_DATABASE_HOST`, `_DATABASE`, `_USER`, `_USER_PASSWORD` | `registry-database`, `registry`, `registry_user`, `password` | Upstream's defaults, spelled out. `database.php` is written only if it doesn't exist. The password is written inside PHP single quotes: no `'`. Use the `_FILE` variants for secrets. |
+| `COMANAGE_REGISTRY_SECURITY_SALT` | a fixed demo value | Without it, `setup` writes a random salt into the container, which changes whenever the container is recreated. Use `COMANAGE_REGISTRY_SECURITY_SALT_FILE` with a secret. |
+| `COMANAGE_REGISTRY_VIRTUAL_HOST_FQDN` | `localhost` | Sets Apache's `ServerName`. Always set it: otherwise it is parsed from the certificate, which breaks with some SANs. |
+| `HTTPS_CERT_FILE`, `HTTPS_PRIVKEY_FILE` | `registry/tls/*.pem`, mounted | Upstream copies them over the image's snakeoil certificate. The workshop's is self-signed for `localhost` and `127.0.0.1` and kept within macOS's limits (825 days, serverAuth), so browsers let you click through. Use your real certificate. |
+| `COMANAGE_REGISTRY_VIRTUAL_HOST_PORT` | the published HTTPS port (8443) | Read by the workshop's vhost for its HTTP→HTTPS redirect. |
+| (not set) `COMANAGE_REGISTRY_WEBROOT` | upstream default `registry` | The app is at `/registry/`. Changing it means rebuilding the image with `--build-arg COMANAGE_REGISTRY_WEBROOT=...` (the symlink is created at build time). |
 
-`docker compose stop`/`start` keeps all state. `docker compose down` discards the container, so the next `up` starts
-from the image's state again; that is the reset participants want. A commented named volume in `compose.yaml` keeps
-the database across `down` for anyone who wants that.
+Never set `COMANAGE_REGISTRY_DATABASE_ENCODING` in 5.2.0: `comanage_utils.sh` also writes it as the connection's time
+zone. The `COMANAGE_REGISTRY_EMAIL_*` variables are ignored by 5.2: outgoing mail is configured in the UI
+(COmanage CO → Configuration → Servers, then CO Settings → Outgoing SMTP Server).
 
-## Build-time database initialisation
+## The one customisation: anonymous login
 
-`workshop-init-db` runs once during `docker build`. It creates the PostgreSQL cluster and the `registry` database,
-then either restores the baked checkpoint `01-fresh` or (when there is none yet) runs upstream's first start
-(`bin/cake database` and `bin/cake setup --admin-username admin`). It finishes by asserting that setup has run, that
-`admin` is an active login identifier and that the Apache configuration parses.
+Upstream's basic-auth image protects `/registry/auth/login/` with `AuthBasicProvider file` and an htpasswd file
+containing `registry.admin`. Benn Oshrin's workshop design uses Apache's `AuthBasicProvider anon` instead: any
+username, empty password, so participants can be anyone. That can't be set with an environment variable, so the
+workshop uses upstream's **slashRoot** mechanism: everything under `registry/slashRoot/` is mounted at
+`/opt/registry/slashRoot` and copied over the image's filesystem at every start (`comanage_utils::process_slash_root`),
+before the entrypoint would generate a vhost:
 
-Consequences:
+- `etc/apache2/sites-available/000-comanage.conf`: the vhost upstream generates for the basic-auth image, with
+  `AuthBasicProvider anon` (`Anonymous *`, `Anonymous_NoUserID Off`, `Anonymous_MustGiveEmail Off`,
+  `Anonymous_LogEmail Off`), `UseCanonicalName Off` and no HSTS (so it works on remapped localhost ports), and an
+  HTTP→HTTPS redirect to the published port instead of upstream's hardcoded `:443`.
+- `etc/apache2/mods-enabled/authn_anon.load`: enables `mod_authn_anon`, which Debian's Apache ships but the image
+  doesn't enable.
 
-- A new container is ready in about ten seconds, and every participant starts from byte-identical state.
-- The shipped state *is* checkpoint `01-fresh`, so `workshop reset` and `docker compose down && up` agree.
-- The security salt is fixed in the image (`COMANAGE_REGISTRY_SECURITY_SALT` and `SECURITY_SALT`), so checkpoints
-  restore identically in any container built from the same Dockerfile. It is a demo salt; never reuse it.
-  (5.2.0 only uses the salt for CSRF tokens and OrcidSource tokens.)
+At home, delete those two files (or the volume line) and you have upstream's basic-auth behaviour; mount your own
+htpasswd at `/etc/apache2/basic-auth`. For a shared machine that still wants personas, `AuthBasicProvider file anon`
+makes `admin` require its htpasswd password while every other username stays anonymous.
 
-## Upstream entrypoint, three workshop fixes
+## Data and checkpoints
 
-`image/bin/workshop-entrypoint` sources upstream's `comanage_utils.sh` (copied from the tag, unmodified) and changes
-three things before calling `comanage_utils::exec_apache_http_server`:
+- The FileSource input files are mounted read-only at `/srv/filesource` (from `filesource/`). Any path the web server
+  user (www-data, uid 33) can read works; FileSource re-reads the file on every sync.
+- Checkpoints are plain `pg_dump -Fc` files in `checkpoints/`, made and restored by the database container's own
+  `pg_dump`/`pg_restore` (`./workshop checkpoint` / `restore`). A restore recreates the `registry` database and
+  restarts the `registry` container, whose entrypoint clears CakePHP's caches. They are produced by
+  `tools/seed/seed-all.sh`, which drives the UI with Playwright from a fresh install.
+- Run `bin/cake` as **www-data** (`docker compose exec -u www-data ...`): the image's entrypoint only fixes the
+  ownership of `app/tmp`, but v5 keeps its cache in `local/tmp`, so cache files created by root break the web server.
 
-1. `OUTPUT=/dev/stdout`, so startup output reaches `docker compose logs`. Upstream discards it unless
-   `COMANAGE_DEBUG` is set, which would also force `DEBUG=true`.
-2. `tmp_ownership()` chowns `local/tmp` and `local/logs`. Upstream chowns `app/tmp`, but v5 keeps TMP, CACHE and LOGS
-   under `local/` (`app/config/paths.php`), so the cache files the root-run start-up commands create would otherwise
-   stay root-owned and break www-data.
-3. At runtime it sets `COMANAGE_REGISTRY_SKIP_SETUP=1`. The schema and the COmanage CO already exist (built in, or
-   restored by `workshop restore`), and in 5.2.0 the schema re-run is not idempotent: for the CoreAssigner plugin it
-   tries `DROP INDEX format_assigner_sequences_i1`, which backs a constraint, and logs a PostgreSQL error on every
-   start. Set `WORKSHOP_SCHEMA_SYNC=1` to run `database`/`setup` anyway (for example with a database volume from an
-   older image).
+## 5.2.0 container quirks you will see (and what they mean)
 
-Settings upstream's scripts consume are image `ENV`s: database host `127.0.0.1`, user `registry_user`, password
-`password` (it is written inside PHP single quotes, so never use `'`), `COMANAGE_REGISTRY_NO_EMAIL_CONFIG=1` (5.2.0
-never loads `email.php`; mail is configured in the UI), `COMANAGE_REGISTRY_VIRTUAL_HOST_FQDN=localhost` (otherwise
-it is parsed from the certificate). Never set `COMANAGE_REGISTRY_DATABASE_ENCODING`: 5.2.0's `comanage_utils.sh`
-writes it as the connection *time zone*.
+- **amd64 only.** The base Dockerfile hardcodes the x86-64 LDAP library path and downloads the x86-64 Oracle Instant
+  Client, so the image cannot be built for arm64. Apple Silicon Macs run it under Docker Desktop's emulation (compose
+  sets `platform: linux/amd64`); the database and Mailpit run natively.
+- **Every start logs a PostgreSQL error** `cannot drop index format_assigner_sequences_i1`: the entrypoint's
+  `bin/cake database` re-run is not idempotent for the CoreAssigner plugin on PostgreSQL. It changes nothing.
+- **`Could not find .../plugins/TermsAgreer/tests/`** and CakePHP deprecation notices appear in the log constantly.
+  Harmless.
+- **Startup output is hidden** unless `COMANAGE_DEBUG=1` (which also forces `DEBUG=true`), so a failed first start
+  shows up only as an unhealthy container.
+- **`build.sh` ignores `--image_registry`/`--repository`** and needs bash 4 and GNU getopt (not on stock macOS).
+- The PHP in the image is 8.3.3, as pinned by the release.
 
-## Anonymous login
+## Security
 
-`image/apache/000-comanage.conf.tmpl` replaces the vhost upstream would generate (upstream's basic-auth vhost hardcodes
-`AuthBasicProvider file`; `prepare_virtual_host` never overwrites an existing `000-comanage.conf`). Only
-`<webroot>/auth/login/` (where `login.php` copies `REMOTE_USER` into the session) is protected:
-
-    AuthType Basic
-    AuthBasicProvider anon
-    Anonymous *
-    Anonymous_NoUserID Off
-    Anonymous_MustGiveEmail Off
-    Anonymous_VerifyEmail Off
-    Anonymous_LogEmail Off
-    Require valid-user
-
-Any username is accepted, the password may be blank, and `Anonymous_LogEmail Off` keeps whatever people type as a
-password out of the logs. `admin` is the platform administrator because `bin/cake setup` gave that Person the login
-identifier `admin`. Other names log in as whoever has that login identifier, or as an "authenticated user" with no
-COs, which is what self-signup enrollment flows need.
-
-Other differences from upstream's generated vhost: `UseCanonicalName Off` and no HSTS, so the app works behind any
-localhost port mapping; plain HTTP redirects to `https://<host>:${WORKSHOP_HTTPS_PORT}/` rather than upstream's
-hardcoded `:443`; health-check requests are not access-logged.
-
-**Shared machines:** for a shared or hosted VM, change the provider to `AuthBasicProvider file anon` with an htpasswd
-file that lists only `admin`. mod_auth_basic does not fall through to the next provider on a wrong password, so
-`admin` then needs its password while every other username stays anonymous. Keep the ports on 127.0.0.1 (or behind a
-VPN) regardless.
-
-## TLS
-
-The image generates a self-signed certificate for `localhost` and `127.0.0.1` at build time (RSA 2048, SHA-256,
-`serverAuth`, 825 days, which macOS and iOS accept as a click-through exception). Every container from one image shares
-the key, which is acceptable for localhost only. Bring your own with `HTTPS_CERT_FILE`/`HTTPS_PRIVKEY_FILE`
-(upstream's mechanism).
-
-## PHP 8.3, not 8.4
-
-Base image `php:8.3.35-apache-bookworm` (pinned by digest). 5.2.0 runs on PHP 8.4, but emits `E_DEPRECATED` notices on
-the workshop's paths (FileSource `fgetcsv()`, SyncJob, every page through StandardController) until the post-tag fix
-a4236939. Extensions added: `intl`, `pdo_pgsql`, `pcntl` (unused at 5.2.0, harmless) and opcache. The committed
-`vendor/` is used as shipped; don't prune it (Composer's autoload files would fatal).
-
-## Logs
-
-Upstream's container mode (`COMANAGE_REGISTRY_CONTAINER=1`) sends CakePHP's debug and error logs to stdout and
-stderr, so web requests log verbosely to `docker compose logs`. The `workshop` CLI and the job runner unset that
-variable, so their CakePHP logs go to `local/logs/cli-*.log` (`workshop logs`) and command output stays readable.
-Two upstream messages appear on most requests and are harmless: `Could not find .../plugins/TermsAgreer/tests/`.
-
-## PostgreSQL
-
-Debian's `postgresql-15` (with `create_main_cluster = false`, so Debian doesn't create its own cluster). JIT is off
-(nothing here benefits, and it avoids loading LLVM). `local` connections are `trust`; TCP from 127.0.0.1 uses
-scram-sha-256. The `PATH` puts `/usr/lib/postgresql/15/bin` first, bypassing Debian's `pg_wrapper`.
-
-## Checkpoints
-
-`workshop checkpoint NAME [description]` writes `pg_dump -Fc` to `/opt/workshop/checkpoints/NAME.dump`.
-`workshop restore NAME` stops Apache and the job runner, drops and recreates the database, restores with
-`--no-owner --no-privileges --role=registry_user`, deletes PHP sessions (they describe the old database) and starts
-Apache again (its entrypoint clears CakePHP's caches). A checkpoint only depends on the image's schema and salt, so it
-restores on any container built from this Dockerfile. Changing the Registry version means re-creating them.
-
-The checkpoints are produced by `tools/seed/` (Playwright driving the real UI, plus the `workshop` CLI for the steps
-that only exist on the command line), so they can be regenerated when the course material changes.
-
-## Changing the webroot or the Registry version
-
-- Webroot: build argument `COMANAGE_REGISTRY_WEBROOT` (default `registry-pe`, which the v5.2 course material uses;
-  upstream's default is `registry`). It sets the symlink, the vhost, the health check and the job runner's probe.
-  Checkpoints don't depend on it.
-- Registry version: change `REGISTRY_TAG` and `REGISTRY_COMMIT` in `image/Dockerfile` (the build refuses a tarball
-  whose embedded commit differs), check `comanage_utils.sh` for changes, rebuild without checkpoints
-  (`git rm image/checkpoints/*.dump`), regenerate them with `tools/seed/`, rebuild.
-
-## Multi-architecture publishing
-
-`.github/workflows/publish.yml` builds natively on GitHub's `ubuntu-24.04` (amd64) and `ubuntu-24.04-arm` (arm64)
-runners, pushes each by digest, merges them into one tag with `docker buildx imagetools create`, then pulls the
-published tag on both architectures and smoke-tests it (health, anonymous login, Mailpit, restoring a checkpoint).
-Push a tag `v5.2.0-N` to publish `5.2.0-N`, `5.2.0` and `latest`. The first push creates a private GHCR package; make
-it public once (package settings, Change visibility) so participants can pull anonymously.
+Anonymous login means anyone who can reach the port is the administrator, so every port is published on 127.0.0.1
+only, the database isn't published at all, and all data is fictional. The certificate's private key, the salt and the
+database password in this repository are public demo values.
