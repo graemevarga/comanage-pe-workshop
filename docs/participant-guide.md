@@ -9,7 +9,7 @@ started with one command. Nothing is shared with other participants, and you can
 
 ## Before the workshop (about 20 minutes, please do it at home)
 
-The first start downloads about 1.5 GB, which is slow on conference Wi-Fi, so please do this beforehand.
+The first start downloads about 500 MB, which is slow on conference Wi-Fi, so please do this beforehand.
 
 ### 1. Install what you need
 

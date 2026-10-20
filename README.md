@@ -21,7 +21,7 @@ cd comanage-pe-workshop
 docker compose up --wait
 ```
 
-The first run downloads about 1.5 GB of images. When the command returns, everything is ready:
+The first run downloads about 500 MB of images. When the command returns, everything is ready:
 
 - **Registry:** <https://localhost:8443/registry/>. Accept the self-signed certificate, click **Login**, type
   username **`admin`** and leave the password empty.
