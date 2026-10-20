@@ -2,3 +2,5 @@
 .env
 /tools/seed/out/
 __pycache__/
+/checkpoints/*.dump
+/checkpoints/*.txt

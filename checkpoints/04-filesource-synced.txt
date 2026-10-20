@@ -1,1 +1,0 @@
-Redcurrant University: FileSource 'HR File' (hr.csv) fully synced, 45 people who can log in with their uid (e.g. ruth.spence)

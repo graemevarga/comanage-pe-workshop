@@ -5,10 +5,15 @@
 #                      ("container/build.sh -s 1 --label 5.2.0 registry basic-auth"), configured only through
 #                      upstream's documented environment variables and its slashRoot mechanism
 #   registry-database  PostgreSQL (official image)
+#   target-database    a second PostgreSQL, standing in for an application database the SQL Provisioner writes to
 #   mailpit            catches all outgoing mail (stands in for your campus SMTP relay)
+#   workshop-setup     runs once after the Registry's first start and prepares what the lesson needs around it
+#                      (setup/setup.sh: points the Registry's outgoing mail at Mailpit, makes provisioned/
+#                      writable for the web server), then exits
 #
-#   docker compose up -d      then open https://localhost:8443/registry/ and log in as "admin" (empty password)
-#   ./workshop help           checkpoints, syncs and other helpers
+#   docker compose up --wait   starts everything and returns when the Registry is ready; then open
+#                              https://localhost:8443/registry/ and log in as "admin" (empty password)
+#   ./workshop help            optional helpers (syncs, reset, checkpoints) for macOS, Linux, WSL and Git Bash
 #
 # Ports are published on 127.0.0.1 only: with anonymous login, anyone who can reach them is an administrator.
 # Change ports and other settings in a .env file (see .env.example).
@@ -46,6 +51,8 @@ services:
       - ./registry/tls:/run/workshop/tls:ro
       # Input files for the FileSource External Identity Source
       - ./filesource:/srv/filesource:ro
+      # Where the File Provisioner writes, so you can open its output on your laptop
+      - ./provisioned:/srv/provisioned
     ports:
       - "127.0.0.1:${HTTPS_PORT:-8443}:443"
       - "127.0.0.1:${HTTP_PORT:-8080}:80"
@@ -70,8 +77,43 @@ services:
       timeout: 5s
       retries: 30
 
+  target-database:
+    image: ${DATABASE_IMAGE:-postgres:17}
+    environment:
+      POSTGRES_DB: target
+      POSTGRES_USER: target_user
+      POSTGRES_PASSWORD: ${TARGET_DATABASE_PASSWORD:-password}
+    volumes:
+      - target-database:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U target_user -d target"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  workshop-setup:
+    image: ${DATABASE_IMAGE:-postgres:17}
+    command: ["bash", "/setup/setup.sh"]
+    environment:
+      PGHOST: registry-database
+      PGDATABASE: registry
+      PGUSER: registry_user
+      PGPASSWORD: ${DATABASE_PASSWORD:-password}
+    volumes:
+      - ./setup:/setup:ro
+      - ./provisioned:/provisioned
+    depends_on:
+      registry:
+        condition: service_healthy
+      target-database:
+        condition: service_healthy
+
   mailpit:
     image: ${MAILPIT_IMAGE:-axllent/mailpit:v1.31.6}
+    # Started after the setup step, so that "docker compose up --wait" returns only once everything is ready.
+    depends_on:
+      workshop-setup:
+        condition: service_completed_successfully
     environment:
       # The Registry's SMTP client always authenticates; accept any (or no) credentials, without TLS
       MP_SMTP_AUTH_ACCEPT_ANY: "1"
@@ -81,3 +123,4 @@ services:
 
 volumes:
   registry-database: {}
+  target-database: {}

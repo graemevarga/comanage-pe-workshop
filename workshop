@@ -7,6 +7,8 @@
 # Works with the bash that ships with macOS (3.2), Linux, WSL and Git Bash on Windows.
 set -euo pipefail
 cd "$(dirname "$0")"
+# Git Bash on Windows rewrites arguments that look like paths (/srv/... -> C:/Program Files/Git/srv/...).
+export MSYS_NO_PATHCONV=1
 
 DB_USER=registry_user
 DB_NAME=registry
@@ -24,10 +26,12 @@ usage() {
     cat << USAGE
 Usage: ./workshop <command> [arguments]
 
+  start                      Start everything (downloads the images the first time) and wait until it is ready
+  stop                       Stop everything; your work is kept
   status                     Containers, URLs and health
-  list                       Checkpoints you can restore
-  restore <name>             Replace the Registry database with a checkpoint, e.g. 04-filesource-synced
-  reset                      Start over: delete the database volume and run the Registry's first start again
+  reset                      Start over: delete the database and run the Registry's first start again
+  list                       Saved checkpoints
+  restore <name>             Replace the Registry database with a saved checkpoint
   sync <co_id> <eis_id> [force] [-v]
                              Full sync of External Identity Source <eis_id> in CO <co_id> (FileSource)
   cake <arguments...>        Run bin/cake in the registry container (as www-data)
@@ -57,17 +61,39 @@ checkpoint_file() {
     echo "${CKPT_DIR}/${name}.dump"
 }
 
+urls() {
+    echo "Registry: https://localhost:${HTTPS_PORT}/registry/   (Login: username admin, empty password)"
+    echo "Mail:     http://localhost:${MAILPIT_PORT}/"
+}
+
+need_docker() {
+    docker info > /dev/null 2>&1 || die "can't reach Docker. Start Docker Desktop (or the docker service) and try again."
+}
+
+cmd_start() {
+    need_docker
+    show docker compose up --wait
+    docker compose up --wait || die "something didn't start; see: docker compose ps   and   docker compose logs registry"
+    echo
+    echo "Ready."
+    urls
+}
+
+cmd_stop() {
+    show docker compose stop
+    docker compose stop
+}
+
 cmd_status() {
     docker compose ps
     echo
-    echo "Registry: https://localhost:${HTTPS_PORT}/registry/   (log in as admin, empty password)"
-    echo "Mailpit:  http://localhost:${MAILPIT_PORT}/"
+    urls
 }
 
 cmd_list() {
     local f name desc
     for f in "${CKPT_DIR}"/*.dump; do
-        [ -e "${f}" ] || { echo "No checkpoints in ${CKPT_DIR}/."; return 0; }
+        [ -e "${f}" ] || { echo "No checkpoints saved in ${CKPT_DIR}/ yet."; return 0; }
         name=$(basename "${f}" .dump)
         desc=""
         if [ -f "${CKPT_DIR}/${name}.txt" ]; then desc=$(head -n 1 "${CKPT_DIR}/${name}.txt"); fi
@@ -109,13 +135,15 @@ cmd_checkpoint() {
 }
 
 cmd_reset() {
-    echo "Deleting the database volume and starting fresh (the Registry's first start runs again)..."
+    need_docker
+    echo "Deleting the database and starting fresh (the Registry's first start runs again)..."
     show docker compose down -v
     docker compose down -v
-    show docker compose up -d
-    docker compose up -d
-    wait_healthy
-    echo "Done: a fresh install with only the platform administrator (admin)."
+    show docker compose up --wait
+    docker compose up --wait || die "something didn't start; see: docker compose ps   and   docker compose logs registry"
+    echo
+    echo "Ready: a fresh install with only the platform administrator (admin)."
+    urls
 }
 
 cmd_sync() {
@@ -152,6 +180,8 @@ cmd_sync() {
 command="${1:-help}"
 shift || true
 case "${command}" in
+    start)      cmd_start ;;
+    stop)       cmd_stop ;;
     status)     cmd_status ;;
     list)       cmd_list ;;
     restore)    cmd_restore "$@" ;;

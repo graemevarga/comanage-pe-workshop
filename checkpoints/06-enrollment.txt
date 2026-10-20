@@ -1,1 +1,0 @@
-Discovery TNG: self-signup flow 'Join Discovery TNG' (email verification through Mailpit, login identifier from the username, COU arbovirus) and its message templates

@@ -1,1 +1,0 @@
-Fresh install plus Mailpit as the Outgoing SMTP Server; admin has a verified email (admin@workshop.test)
