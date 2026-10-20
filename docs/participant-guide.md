@@ -22,16 +22,26 @@ The first start downloads about 500 MB, which is slow on conference Wi-Fi, so pl
   - macOS and Windows: [Docker Desktop](https://docs.docker.com/desktop/). On Windows, keep the installer's default
     (WSL 2); it may ask you to restart.
   - Linux: [Docker Engine](https://docs.docker.com/engine/install/) with the Compose plugin; `docker compose version`
-    should work. To run `docker` without `sudo`, add yourself to the `docker` group
-    (`sudo usermod -aG docker $USER`, then log out and back in); that group is equivalent to root on your machine, so
-    if you'd rather not, put `sudo` in front of the docker commands (and of `./workshop`).
+    should work. To run `docker` without `sudo`, add yourself to the `docker` group, then log out and back in:
+
+    ```bash
+    sudo usermod -aG docker $USER
+    ```
+
+    That group is equivalent to root on your machine, so if you'd rather not, put `sudo` in front of the docker
+    commands (and of `./workshop`).
   - Docker Desktop is free for personal use, education and small businesses, but professional use at larger
     organisations and government needs a paid subscription; check with your IT department.
   - **Apple Silicon Macs:** the Registry image is built for Intel/AMD, as the release builds it, and Docker Desktop
     runs it under emulation. In Docker Desktop, *Settings → General*, keep **Use Rosetta for x86_64/amd64 emulation on
     Apple Silicon** turned on.
 - **Git**, to download the workshop files.
-  - macOS: type `git --version` in Terminal; if Git is missing, macOS offers to install it.
+  - macOS: type this in Terminal; if Git is missing, macOS offers to install it:
+
+    ```bash
+    git --version
+    ```
+
   - Windows: [Git for Windows](https://git-scm.com/download/win) (the default options are fine).
   - Linux: your package manager (`sudo apt install git`, `sudo dnf install git`).
   - No Git? On <https://github.com/graemevarga/comanage-pe-workshop>, click **Code → Download ZIP**, unzip it, and
@@ -101,9 +111,47 @@ A fresh install, plus only what the lesson needs around it. You build everything
 |---|---|
 | **The Registry** | <https://localhost:8443/registry/>. Only the COmanage CO and the platform administrator `admin` exist. The plugins are installed but not active; you activate the ones you need during the lesson. |
 | **Mail** | The Registry's outgoing mail already goes to Mailpit, <http://localhost:8025/>. Nothing leaves your laptop. |
-| **Files for the FileSource** | `hr.csv` and `registrar.csv` in the `filesource` folder (fictional people). The Registry sees them as `/srv/filesource/hr.csv` and `/srv/filesource/registrar.csv`. |
-| **File Provisioner output** | `output.jsonl` in the `provisioned` folder: open it on your laptop to see what the Registry writes (one JSON record per line). The Registry sees it as `/srv/provisioned/output.jsonl`. |
-| **SQL Provisioner target** | A separate PostgreSQL database for the Registry to write to: host `target-database`, port 5432, database `target`, username `target_user`, password `password`. |
+| **Files for the FileSource** | `hr.csv` and `registrar.csv` in the `filesource` folder (fictional people). |
+| **File Provisioner output** | `output.jsonl` in the `provisioned` folder: open it on your laptop to see what the Registry writes (one JSON record per line). |
+| **SQL Provisioner target** | A separate PostgreSQL database for the Registry to write to. |
+
+### Values you will type into the Registry
+
+Each value is in a block of its own, so you can copy it (on GitHub, with the button on the block).
+
+The FileSource's File Name, for the HR file and the registrar file:
+
+```
+/srv/filesource/hr.csv
+```
+
+```
+/srv/filesource/registrar.csv
+```
+
+The File Provisioner's File Name:
+
+```
+/srv/provisioned/output.jsonl
+```
+
+The SQL Provisioner's server (RDBMS Type **Postgres**, Port empty): Hostname, Database Name, Username and Password:
+
+```
+target-database
+```
+
+```
+target
+```
+
+```
+target_user
+```
+
+```
+password
+```
 
 ## Logging in as other people
 
@@ -121,15 +169,52 @@ to:
 
 Run them in the `comanage-pe-workshop` folder. They work the same in Terminal, PowerShell and Linux shells.
 
-| To | Run |
-|---|---|
-| Start, or resume after a pause | `docker compose up --wait` |
-| Pause (your work is kept) | `docker compose stop` |
-| Start over from a fresh install | `docker compose down -v`, then `docker compose up --wait` |
-| Run a full FileSource sync (the lesson gives you the numbers) | `docker compose exec -u www-data -w /srv/comanage-registry/app registry ./bin/cake job -c <CO id> -j CoreJob.SyncJob -s external_identity_source_id=<source id>` |
-| Run queued jobs (for example after Reprovision All) | `docker compose exec -u www-data -w /srv/comanage-registry/app registry ./bin/cake job -r -c <CO id>` |
-| Look at the SQL Provisioner's tables | `docker compose exec target-database psql -U target_user -d target` (then `\dt`, and `\q` to quit) |
-| See the Registry's log | `docker compose logs registry` |
+Start, or resume after a pause:
+
+```bash
+docker compose up --wait
+```
+
+Pause (your work is kept):
+
+```bash
+docker compose stop
+```
+
+Start over from a fresh install (deletes everything you did):
+
+```bash
+docker compose down -v
+```
+
+```bash
+docker compose up --wait
+```
+
+Run a full FileSource sync. Replace `3` with your CO's id and `1` with the External Identity Source's id (both are
+in the page addresses, `co_id=3` and `external-identity-sources/edit/1`):
+
+```bash
+docker compose exec -u www-data -w /srv/comanage-registry/app registry ./bin/cake job -c 3 -j CoreJob.SyncJob -s external_identity_source_id=1
+```
+
+Run queued jobs, for example after Reprovision All (replace `3` with your CO's id):
+
+```bash
+docker compose exec -u www-data -w /srv/comanage-registry/app registry ./bin/cake job -r -c 3
+```
+
+Look at the SQL Provisioner's tables (then `\dt` lists them, and `\q` quits):
+
+```bash
+docker compose exec target-database psql -U target_user -d target
+```
+
+See the Registry's log:
+
+```bash
+docker compose logs registry
+```
 
 On macOS, Linux and in Git Bash, `./workshop help` lists shortcuts for some of these; each prints the full command
 it runs.
@@ -138,27 +223,72 @@ it runs.
 
 - **"Cannot connect to the Docker daemon"**, **"error during connect"** or **"The system cannot find the file
   specified"**: Docker isn't running. Start Docker Desktop, wait until it says it is running, and try again.
-- **"port is already allocated"**: another program uses port 8443 or 8025. Copy `.env.example` to `.env`, change
-  `HTTPS_PORT` or `MAILPIT_PORT` (for example to 9443 or 9025), run `docker compose up --wait` again, and use your
-  port in the addresses.
+- **"port is already allocated"**: another program uses port 8443 or 8025. Copy `.env.example` to `.env`, and in
+  `.env` change the port that is taken, for example:
+
+  ```
+  HTTPS_PORT=9443
+  ```
+
+  ```
+  MAILPIT_PORT=9025
+  ```
+
+  Then run `docker compose up --wait` again, and use your port in the addresses (<https://localhost:9443/registry/>).
 - **<https://localhost:8443/registry/> shows something other than COmanage** (for example "404 Not Found" from
   nginx), although `docker compose up --wait` said `Healthy`: another program already holds port 8443, such as
-  Docker Desktop's own Kubernetes (with an ingress) or a local web server, and Docker couldn't publish the
-  Registry there. `docker compose port registry 443` then doesn't print `127.0.0.1:8443`. Set another port as
-  above (`HTTPS_PORT=9443` in `.env`), run `docker compose up --wait`, and use <https://localhost:9443/registry/>.
+  Docker Desktop's own Kubernetes (with an ingress) or a local web server, and Docker couldn't publish the Registry
+  there. This command then doesn't print `127.0.0.1:8443`:
+
+  ```bash
+  docker compose port registry 443
+  ```
+
+  Set another port as above (`HTTPS_PORT=9443` in `.env`), run `docker compose up --wait`, and use
+  <https://localhost:9443/registry/>.
 - **Windows: "An attempt was made to access a socket in a way forbidden by its access permissions"**: Windows has
-  reserved that port (Hyper-V and WSL reserve ranges of ports). `netsh interface ipv4 show excludedportrange
-  protocol=tcp` lists the reserved ranges; pick ports outside them in `.env` as above.
-- **`docker compose up --wait` ends with "unhealthy" or "didn't complete successfully"**: run
-  `docker compose logs registry` (or `docker compose logs workshop-setup`) and send the output to the organisers.
-  `docker compose down -v` and `docker compose up --wait` starts over.
+  reserved that port (Hyper-V and WSL reserve ranges of ports). This lists the reserved ranges; pick ports outside
+  them in `.env` as above:
+
+  ```powershell
+  netsh interface ipv4 show excludedportrange protocol=tcp
+  ```
+
+- **`docker compose up --wait` ends with "unhealthy" or "didn't complete successfully"**: send the output of these
+  to the organisers:
+
+  ```bash
+  docker compose logs registry
+  ```
+
+  ```bash
+  docker compose logs workshop-setup
+  ```
+
+  `docker compose down -v`, then `docker compose up --wait`, starts over.
 - **Linux: the `registry` container never becomes healthy**, although `registry-database` is: a host firewall
-  (firewalld, ufw, or rules added by other software) may be blocking traffic between containers. Restart Docker
-  (`sudo systemctl restart docker`) so it re-creates its firewall rules, then `docker compose up --wait`; if that
-  doesn't help, see Docker's [packet filtering and firewalls](https://docs.docker.com/engine/network/packet-filtering-firewalls/).
-  One case seen on Debian 13: an old iptables-legacy firewall with a DROP policy, left by other software, still
-  filters container traffic (`sudo iptables-legacy -L FORWARD` shows `policy DROP`). If nothing on your machine
-  relies on it, `sudo iptables-legacy -P FORWARD ACCEPT` restores the default; otherwise ask whoever manages it.
+  (firewalld, ufw, or rules added by other software) may be blocking traffic between containers. Restart Docker so
+  it re-creates its firewall rules, then `docker compose up --wait`:
+
+  ```bash
+  sudo systemctl restart docker
+  ```
+
+  If that doesn't help, see Docker's
+  [packet filtering and firewalls](https://docs.docker.com/engine/network/packet-filtering-firewalls/). One case
+  seen on Debian 13: an old iptables-legacy firewall with a DROP policy, left by other software, still filters
+  container traffic. This shows `policy DROP`:
+
+  ```bash
+  sudo iptables-legacy -L FORWARD
+  ```
+
+  If nothing on your machine relies on it, this restores the default; otherwise ask whoever manages the machine:
+
+  ```bash
+  sudo iptables-legacy -P FORWARD ACCEPT
+  ```
+
 - **Downloads fail** (for example "denied" or a timeout from `ghcr.io`): a VPN or corporate proxy may block GitHub's
   container registry. Try again off the VPN or on another network.
 - **Apple Silicon: "The requested image's platform (linux/amd64) does not match the detected host platform"**:
@@ -166,13 +296,22 @@ it runs.
 - **"Too many redirects" (ERR_TOO_MANY_REDIRECTS)**: you are logged in as someone who may not see that page. Go back
   to <https://localhost:8443/registry/>, or log out and in as `admin`.
 - **The login box keeps coming back**: type a username; the password may stay empty, but the username may not.
-- **Linux: "the Registry cannot write provisioned/output.jsonl"**: run
-  `chmod 0777 provisioned && chmod 0666 provisioned/output.jsonl`, then `docker compose up --wait`.
+- **Linux: "the Registry cannot write provisioned/output.jsonl"**: run this, then `docker compose up --wait`:
+
+  ```bash
+  chmod 0777 provisioned && chmod 0666 provisioned/output.jsonl
+  ```
+
 - **Windows, Git Bash**: use PowerShell for the commands above. Git Bash changes arguments that look like paths
   (`/srv/...`), which breaks them; `./workshop` handles that for you.
 
 ## After the workshop
 
-To remove everything, including the downloaded images: `docker compose down -v --rmi all`, then delete the
-`comanage-pe-workshop` folder. To build and run the same Registry in your own environment, see
-[Running it yourself](at-home.md).
+To remove everything, including the downloaded images, run this in the folder, then delete the
+`comanage-pe-workshop` folder:
+
+```bash
+docker compose down -v --rmi all
+```
+
+To build and run the same Registry in your own environment, see [Running it yourself](at-home.md).

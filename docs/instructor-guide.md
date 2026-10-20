@@ -54,56 +54,170 @@ order on a fresh install, the ids are: COs COmanage **1**, Discovery TNG **2**, 
 Guests **4**, MESS **5**; External Identity Source "HR File" **1**; the HR people are Person ids 2-46 (in SORID
 order), Lamar Martin 47, Claude Larkin 48.
 
+Menu paths, buttons and choices from drop-down lists are in **bold**. Everything you type or paste into a field is
+in a code block of its own, so you can copy it with the button GitHub shows on the block.
+
 ### Mail (done by the setup step)
 
-The setup step does what the platform administrator would do in the COmanage CO: **Configuration → Servers → Add a
-New Server**: Description "Mailpit (workshop mail catcher)", Status Active, Plugin `CoreServer.SmtpServers` → Save →
-Hostname **`mailpit`** (the compose service name), Port **1025**, untick **Use TLS**, Default From
-`registry@workshop.test`, Default Reply-To `noreply@workshop.test`, Username and Password empty → Save; then
-**Configuration → CO Settings** → *Outgoing SMTP Server*: that server → Save. Set on the COmanage CO, it applies to
-every CO. Show these two pages: they are what participants will do at home.
+The setup step does what the platform administrator would do in the COmanage CO. Show these two pages: they are
+what participants will do at home.
+
+1. **Configuration → Servers → Add a New Server**: Status **Active**, Plugin **CoreServer.SmtpServers**, and
+   Description:
+
+   ```
+   Mailpit (workshop mail catcher)
+   ```
+
+   Save. On the next page untick **Use TLS**, leave Username and Password empty, and fill in:
+   - Hostname (the compose service name):
+
+     ```
+     mailpit
+     ```
+
+   - Port:
+
+     ```
+     1025
+     ```
+
+   - Default From:
+
+     ```
+     registry@workshop.test
+     ```
+
+   - Default Reply-To:
+
+     ```
+     noreply@workshop.test
+     ```
+
+   Save.
+2. **Configuration → CO Settings** → Outgoing SMTP Server: **Mailpit (workshop mail catcher)** → Save. Set on the
+   COmanage CO, it applies to every CO.
 
 To test mail from the command line, the recipient needs a verified address: user menu → **my canvas** → **Add
-Attribute** → Email Address `admin@workshop.test`, type Official → Save → **Force Verify** (pressing it again on a
-verified address gives HTTP 500 in 5.2.0); then `./workshop mail-test 1`.
+Attribute** → Email Address, type **Official**:
+
+```
+admin@workshop.test
+```
+
+Save → **Force Verify** (pressing it again on a verified address gives HTTP 500 in 5.2.0). Then:
+
+```bash
+./workshop mail-test 1
+```
 
 ### Configuration
 
 1. **Configuration → Platform-Wide Configuration → Plugins**: on the **FileConnector** row, gear menu → **Activate**
    ("Plugin Activated"). Same for **PipelineToolkit**, and for **SqlConnector** if the lesson uses the SQL
    Provisioner. Activation applies the plugin's database schema at once. After login, `admin` lands on "Available
-   Collaborations" once other COs exist: pick COmanage to see this menu.
-   (Command-line equivalent: `./workshop cake plugin -a activate -p FileConnector,PipelineToolkit,SqlConnector`.)
-2. **Platform-Wide Configuration → COs → Add a New CO**, in this order so the ids match the course material:
-   Discovery TNG ("Discovery TNG Demo CO"), Redcurrant University ("Redcurrant University Person Registry"),
-   Guests ("Guest Registry"), MESS ("Medium Energy Synchrotron Source"). Each new CO gets its default Types, the
-   CO:admins / CO:approvers / CO:members:active / CO:members:all / CO:mfaexempt groups (plus their owners groups) and
-   CO Settings. `admin` shows as "(Not a Member)": platform admins manage every CO without being a Person in it.
-3. In Discovery TNG: **Configuration → Types → Add a New Type**: Attribute `PersonRoles.affiliation_type`, Display
-   Name "Principal Investigator", Database Value `principal-investigator`.
+   Collaborations" once other COs exist: pick COmanage to see this menu. Command-line equivalent:
+
+   ```bash
+   ./workshop cake plugin -a activate -p FileConnector,PipelineToolkit,SqlConnector
+   ```
+
+2. **Platform-Wide Configuration → COs → Add a New CO**, four times, in this order so the ids match the course
+   material (Name, then Description):
+
+   ```
+   Discovery TNG
+   ```
+   ```
+   Discovery TNG Demo CO
+   ```
+
+   ```
+   Redcurrant University
+   ```
+   ```
+   Redcurrant University Person Registry
+   ```
+
+   ```
+   Guests
+   ```
+   ```
+   Guest Registry
+   ```
+
+   ```
+   MESS
+   ```
+   ```
+   Medium Energy Synchrotron Source
+   ```
+
+   Each new CO gets its default Types, the CO:admins / CO:approvers / CO:members:active / CO:members:all /
+   CO:mfaexempt groups (plus their owners groups) and CO Settings. `admin` shows as "(Not a Member)": platform admins
+   manage every CO without being a Person in it.
+3. In Discovery TNG: **Configuration → Types → Add a New Type**: Attribute **PersonRoles.affiliation_type**, and
+   - Display Name:
+
+     ```
+     Principal Investigator
+     ```
+
+   - Database Value:
+
+     ```
+     principal-investigator
+     ```
 
 ### Connections
 
-1. In Redcurrant University: **Connections → Pipelines → Add a New Pipeline**: Description "Process HR API Inputs",
-   Status Active, Match Strategy **Identifier**, Identifier Type **UID** (appears after choosing Identifier),
-   Person Status On Create **Active** (never leave it blank: every synced record then fails), Role Status On Delete
-   **Expired**.
-2. **Configuration → API Users → Add a New API User**: type `hr_api_user` (the page adds the `co_3.` prefix itself;
-   typing it yourself gives `co_3.co_3.hr_api_user`). Open the user and click **Generate API Key**: the key is shown
-   once, and every visit to that page generates a new one.
+1. In Redcurrant University: **Connections → Pipelines → Add a New Pipeline**: Status **Active**, Match Strategy
+   **Identifier**, Identifier Type **UID** (appears after choosing Identifier), Person Status On Create **Active**
+   (never leave it blank: every synced record then fails), Role Status On Delete **Expired**, and Description:
+
+   ```
+   Process HR API Inputs
+   ```
+
+2. **Configuration → API Users → Add a New API User**, Username:
+
+   ```
+   hr_api_user
+   ```
+
+   The page adds the `co_3.` prefix itself; typing it yourself gives `co_3.co_3.hr_api_user`. Open the user and click
+   **Generate API Key**: the key is shown once, and every visit to that page generates a new one.
 
 #### Optional: push a person through the API (ApiConnector)
 
 Verified working:
 
 1. Activate **ApiConnector** on the Plugins page (COmanage CO).
-2. Redcurrant: **Connections → External Identity Sources → Add**: Description "HR API", Status **Manual**, Plugin
-   `ApiConnector.ApiSources`, Pipeline "Process HR API Inputs", System of Record Label **`hr`** (required by
-   ApiConnector). The next page ("Push Mode, This plugin requires no configuration") has the API source id in its URL
+2. Redcurrant: **Connections → External Identity Sources → Add**: Status **Manual**, Plugin
+   **ApiConnector.ApiSources**, Pipeline **Process HR API Inputs**, and
+   - Description:
+
+     ```
+     HR API
+     ```
+
+   - System of Record Label (required by ApiConnector):
+
+     ```
+     hr
+     ```
+
+   The next page ("Push Mode, This plugin requires no configuration") has the API source id in its URL
    (`api-connector/api-sources/edit/<ID>`).
-3. **Configuration → APIs → Add**: Description "HR API Push", Plugin `ApiConnector.ApiSourceEndpoints`, API User
-   `co_3.hr_api_user`; on the next page choose API Source "HR API" and Save. The page then shows the endpoint.
-4. Generate the key (chapter 3, step 2), then from the repository directory:
+3. **Configuration → APIs → Add**: Plugin **ApiConnector.ApiSourceEndpoints**, API User **co_3.hr_api_user**, and
+   Description:
+
+   ```
+   HR API Push
+   ```
+
+   On the next page choose API Source **HR API** and Save. The page then shows the endpoint.
+4. Generate the key (Connections, step 2), then from the repository directory (replace `<KEY>`):
 
    ```bash
    docker compose exec registry curl -k -i -X PUT -u 'co_3.hr_api_user:<KEY>' \
@@ -120,135 +234,413 @@ Verified working:
 
 ### FileSource
 
-1. **Connections → Pipelines → Add**: "Process HR File Inputs", same settings as chapter 3.
-2. Open it, click **Flanges** → **Add**: Description "Login identifiers from uid", Status **Build Related Attributes**,
-   Plugin `PipelineToolkit.IdentifierMappers`; then **Login Identifier Types → Add**: Type **UID**, **Login** ticked.
-   This copies each record's `uid` onto the Person as a login identifier, so participants can log in as
-   `ruth.spence`. Without it, file-sourced people cannot log in (CSV v3 cannot carry login identifiers).
-3. **Connections → External Identity Sources → Add**: Description "HR File", Status **Full** (never leave it
-   Disabled: syncing a Disabled source throws a TypeError in 5.2.0), Plugin `FileConnector.FileSources`, Pipeline
-   "Process HR File Inputs", System of Record Label `hr`. Saving opens the File Source form: File Name
-   **`/srv/filesource/hr.csv`**, File Format **CSV v3**, leave Archive Directory empty.
-4. Full sync, from the command line (5.2.0 has no UI button for it):
-   `./workshop sync 3 1` → `Job N: OK - Sync Finished (45 new, 0 updated, 0 errors, 45 total)` in a few seconds
-   (N is the job's id, which counts every job in the Registry, so it is rarely 1). The
-   underlying command is
-   `docker compose exec -u www-data -w /srv/comanage-registry/app registry ./bin/cake job -c 3 -j CoreJob.SyncJob -s external_identity_source_id=1`
-   (always as www-data). Show the result under **Operations → Jobs** (open the job: the list only says "Started via
-   JobCommand"; the job's own page has "Sync Finished ...") and **People → My Population**.
-5. One record at a time in the UI: **External Identity Sources → HR File → Search Source**, search `Spence`, click
-   the SORID → the retrieved record (raw CSV row included) → **Sync Record to CO** ("External Identity Source sync
-   complete").
-6. Log in as `ruth.spence` in a private window: she lands on Redcurrant University's dashboard as herself.
+1. **Connections → Pipelines → Add**, with the same settings as in Connections step 1, and Description:
 
-Exercise: add a second source for `registrar.csv` (same pipeline, System of Record Label `registrar`, File Name
-`/srv/filesource/registrar.csv`), then `./workshop sync 3 2`: 45 more people, with eppn identifiers, who log in with
-their uid (e.g. `lamar.martin`). Do it before the organisational structure procedure, which creates Lamar
-Martin by hand without a uid, so a later registrar sync makes a second Lamar Martin. Source ids are in the source's
-URL (`external-identity-sources/edit/N`).
+   ```
+   Process HR File Inputs
+   ```
+
+2. Open it, click **Flanges** → **Add**: Status **Build Related Attributes**, Plugin
+   **PipelineToolkit.IdentifierMappers**, and Description:
+
+   ```
+   Login identifiers from uid
+   ```
+
+   Then **Login Identifier Types → Add**: Type **UID**, **Login** ticked. This copies each record's `uid` onto the
+   Person as a login identifier, so participants can log in as `ruth.spence`. Without it, file-sourced people cannot
+   log in (CSV v3 cannot carry login identifiers).
+3. **Connections → External Identity Sources → Add**: Status **Full** (never leave it Disabled: syncing a Disabled
+   source throws a TypeError in 5.2.0), Plugin **FileConnector.FileSources**, Pipeline **Process HR File Inputs**,
+   and
+   - Description:
+
+     ```
+     HR File
+     ```
+
+   - System of Record Label:
+
+     ```
+     hr
+     ```
+
+   Saving opens the File Source form: File Format **CSV v3**, leave Archive Directory empty, and File Name:
+
+   ```
+   /srv/filesource/hr.csv
+   ```
+
+4. Full sync, from the command line (5.2.0 has no UI button for it):
+
+   ```bash
+   ./workshop sync 3 1
+   ```
+
+   prints `Job N: OK - Sync Finished (45 new, 0 updated, 0 errors, 45 total)` in a few seconds (N is the job's id,
+   which counts every job in the Registry, so it is rarely 1). The underlying command, which also works in
+   PowerShell, always runs as www-data:
+
+   ```bash
+   docker compose exec -u www-data -w /srv/comanage-registry/app registry ./bin/cake job -c 3 -j CoreJob.SyncJob -s external_identity_source_id=1
+   ```
+
+   Show the result under **Operations → Jobs** (open the job: the list only says "Started via JobCommand"; the job's
+   own page has "Sync Finished ...") and **People → My Population**.
+5. One record at a time in the UI: **External Identity Sources → HR File → Search Source**, search for
+
+   ```
+   Spence
+   ```
+
+   click the SORID → the retrieved record (raw CSV row included) → **Sync Record to CO** ("External Identity Source
+   sync complete").
+6. Log in as Ruth Spence in a private window (empty password); she lands on Redcurrant University's dashboard as
+   herself:
+
+   ```
+   ruth.spence
+   ```
+
+Exercise: add a second source for `registrar.csv`, the same way as step 3 with the same pipeline, but System of
+Record Label `registrar` and File Name:
+
+```
+/srv/filesource/registrar.csv
+```
+
+Then `./workshop sync 3 2`: 45 more people, with eppn identifiers, who log in with their uid (e.g. `lamar.martin`).
+Do it before the organisational structure procedure, which creates Lamar Martin by hand without a uid, so a later
+registrar sync makes a second Lamar Martin. Source ids are in the source's URL (`external-identity-sources/edit/N`).
 
 ### Organisational structure
 
 Redcurrant University:
 
-1. **Structure → COUs → Add a New COU**: Alumni ("Alumni of the student body"), Faculty/Staff ("Active faculty and
-   administration"), Retirees ("Former faculty/staff"), Students ("Active students"). Each COU gets
-   `CO:COU:<name>:admins`, `:approvers`, `:members:active`, `:members:all` (and owners groups).
-2. **Structure → Groups → Add a New Group**: `Access-wiki`. Then open `CO:COU:Retirees:members:active` → **Group
-   Nestings** → **Add**: Target Group `Access-wiki` ("Where the current group will be nested").
-3. **People → My Population → Add**: Lamar Martin (Official name, Active). Add him to CO:admins,
-   CO:COU:Faculty/Staff:admins and CO:COU:Retirees:admins (group → **Group Members** → *Add member* picker).
-4. Ruth Spence (from the HR file) → **Person Roles → Add**: COU Faculty/Staff, Affiliation Member, Status Active,
-   Title "Associate Professor", Department "Biology".
-5. Live sequence: set that role's Status to **Expired** → Ruth shows *Expired* and keeps only
-   the `members:all` groups; add a second role in COU **Retirees** (Active) → she is Active again, in
+1. **Structure → COUs → Add a New COU**, four times (Name, then Description):
+
+   ```
+   Alumni
+   ```
+   ```
+   Alumni of the student body
+   ```
+
+   ```
+   Faculty/Staff
+   ```
+   ```
+   Active faculty and administration
+   ```
+
+   ```
+   Retirees
+   ```
+   ```
+   Former faculty/staff
+   ```
+
+   ```
+   Students
+   ```
+   ```
+   Active students
+   ```
+
+   Each COU gets `CO:COU:<name>:admins`, `:approvers`, `:members:active`, `:members:all` (and owners groups).
+2. **Structure → Groups → Add a New Group**, Name (and, optionally, Description "Access to the wiki"):
+
+   ```
+   Access-wiki
+   ```
+
+   Then open **CO:COU:Retirees:members:active** → **Group Nestings** → **Add**: Target Group **Access-wiki** ("Where
+   the current group will be nested").
+3. **People → My Population → Add**: Status **Active**, Name type **Official**, Given Name and Family Name:
+
+   ```
+   Lamar
+   ```
+   ```
+   Martin
+   ```
+
+   Add him to **CO:admins**, **CO:COU:Faculty/Staff:admins** and **CO:COU:Retirees:admins** (group → **Group
+   Members** → *Add member* picker: type `Martin`, pick him; the dialog stays open after Save, close it).
+4. Ruth Spence (from the HR file) → **Person Roles → Add**: COU **Faculty/Staff**, Affiliation **Member**, Status
+   **Active**, and
+   - Title:
+
+     ```
+     Associate Professor
+     ```
+
+   - Department:
+
+     ```
+     Biology
+     ```
+
+5. Live sequence: set that role's Status to **Expired** → Ruth shows *Expired* and keeps only the `members:all`
+   groups; add a second role in COU **Retirees** (Active) → she is Active again, in
    `CO:COU:Retirees:members:active` and, through the nesting, in **Access-wiki**. Memberships update immediately.
 
 Discovery TNG:
 
-6. **Structure → COUs → Add**: `arbovirus`.
-7. **People → My Population → Add**: Claude Larkin, Date of Birth 1980-02-18; **Person Roles → Add**: COU arbovirus,
-   Affiliation **Principal Investigator** (the type from chapter 2), Title "Principal Investigator". He ends up in four
-   groups: CO:members:active/all and CO:COU:arbovirus:members:active/all.
-8. **Structure → Groups → CO:mfaexempt** → Description "MFA Exemptions".
+6. **Structure → COUs → Add**, Name and Description:
+
+   ```
+   arbovirus
+   ```
+   ```
+   Investigation vector-borne determinants of Aedes-transmitted arboviral infections in Cambodia
+   ```
+
+7. **People → My Population → Add**: Status **Active**, Name type **Official**, Given Name, Family Name and Date of
+   Birth:
+
+   ```
+   Claude
+   ```
+   ```
+   Larkin
+   ```
+   ```
+   1980-02-18
+   ```
+
+   Then **Person Roles → Add**: COU **arbovirus**, Affiliation **Principal Investigator** (the type from
+   Configuration step 3), Title:
+
+   ```
+   Principal Investigator
+   ```
+
+   He ends up in four groups: CO:members:active/all and CO:COU:arbovirus:members:active/all.
+8. **Structure → Groups → CO:mfaexempt** → Description:
+
+   ```
+   MFA Exemptions
+   ```
 
 ### Enrollment: self-signup
 
 Discovery TNG's **"Join Discovery TNG"**: anyone who logs in can sign up, verifies their email with a code from
 Mailpit, and gets a login identifier and a role in COU arbovirus.
 
-1. **Configuration → Message Templates → Add**, twice (Status Active, Format Plain Text):
-   - "Discovery TNG Email Verification", Context **Verification**, Subject `(@CO_NAME) email verification code`, body
-     containing `(@VERIFICATION_CODE)`.
-   - "Discovery TNG Welcome", Context **Enrollment Finalization**, Subject `Welcome to (@CO_NAME)`, body using
-     `(@ENROLLEE_NAME)` and `(@ENROLLEE_EMAIL)`.
-   Substitutions are written `(@NAME)`; no `<` or `>` in the plain text.
-2. **People → Enrollment Flows → Add**: Name "Join Discovery TNG", Petitioner Authorization **Any Authenticated
-   User**, **Collect Enrollee Email** ticked (without it the welcome mail is never sent), Finalization Message
-   Template "Discovery TNG Welcome".
-3. **Enrollment Flow Steps → Add**, each with Actor Type **Enrollee**:
-   1. "About You": `CoreEnroller.BasicAttributeCollectors`; Name Type Official, Email Address Type Personal,
-      Affiliation Type Affiliate, COU arbovirus.
-   2. "Verify Your Email Address": `CoreEnroller.EmailVerifiers`; Mode **One**, Message Template "Discovery TNG Email
-      Verification", Request Validity **60** (required, only a placeholder is shown), untick Enable Attempt Blocker.
-   3. "Link Your Login": `CoreEnroller.IdentifierCollectors`; Type **Network**. It has no page: it records the
-      username the enrollee logged in with as their login identifier.
-4. Run it as a new person: copy the flow's **Start** link (`https://localhost:8443/registry/enrollment-flows/start/1`),
-   open a private window, log in as e.g. `pat.newcomer` (empty password), enter an email address, fill About You
-   (same email), **Verify** → the code arrives in Mailpit → enter it → **Verify Email** → **Finish** →
-   "Enrollment Complete". The welcome mail follows. Logging in again as `pat.newcomer` lands in Discovery TNG.
-   Each username can enrol once per database. **Never click Start as `admin`**: it would record admin as the enrollee.
+1. **Configuration → Message Templates → Add**, twice, each with Status **Active** and Format **Plain Text**.
+   Substitutions are written `(@NAME)`; no `<` or `>` in plain text.
+   - Context **Verification**. Description, Subject, Message Body:
+
+     ```
+     Discovery TNG Email Verification
+     ```
+     ```
+     (@CO_NAME) email verification code
+     ```
+     ```
+     Hello,
+
+     Someone (hopefully you) is enrolling in (@CO_NAME) and asked us to verify this email address.
+
+     Your verification code is: (@VERIFICATION_CODE)
+
+     Enter this code on the enrollment page within 60 minutes. You may type it with or without the dash.
+
+     If you did not request this, you can ignore this message.
+     ```
+
+   - Context **Enrollment Finalization**. Description, Subject, Message Body:
+
+     ```
+     Discovery TNG Welcome
+     ```
+     ```
+     Welcome to (@CO_NAME)
+     ```
+     ```
+     Hello (@ENROLLEE_NAME),
+
+     Your enrollment in (@CO_NAME) is complete.
+
+     Log in to the Registry with the same username you used to enroll.
+
+     This message was sent to (@ENROLLEE_EMAIL).
+     ```
+
+2. **People → Enrollment Flows → Add**: Status **Active**, Petitioner Authorization **Any Authenticated User**,
+   **Collect Enrollee Email** ticked (without it the welcome mail is never sent), Finalization Message Template
+   **Discovery TNG Welcome**, and Name:
+
+   ```
+   Join Discovery TNG
+   ```
+
+3. **Enrollment Flow Steps → Add**, three times, each with Actor Type **Enrollee** (Description, then the plugin's
+   settings):
+   1. Plugin **CoreEnroller.BasicAttributeCollectors**; Name Type **Official**, Email Address Type **Personal**,
+      Affiliation Type **Affiliate**, COU **arbovirus**:
+
+      ```
+      About You
+      ```
+
+   2. Plugin **CoreEnroller.EmailVerifiers**; Mode **One**, Message Template **Discovery TNG Email Verification**,
+      untick Enable Attempt Blocker, and Request Validity (required, though only a placeholder is shown):
+
+      ```
+      Verify Your Email Address
+      ```
+      ```
+      60
+      ```
+
+   3. Plugin **CoreEnroller.IdentifierCollectors**; Type **Network**. It has no page: it records the username the
+      enrollee logged in with as their login identifier.
+
+      ```
+      Link Your Login
+      ```
+
+4. Run it as a new person: copy the flow's **Start** link, open a private window, and paste it:
+
+   ```
+   https://localhost:8443/registry/enrollment-flows/start/1
+   ```
+
+   Log in as a new username (empty password), for example
+
+   ```
+   pat.newcomer
+   ```
+
+   enter an email address, fill About You (same email), **Verify** → the code arrives in Mailpit → enter it →
+   **Verify Email** → **Finish** → "Enrollment Complete". The welcome mail follows. Logging in again as
+   `pat.newcomer` lands in Discovery TNG. Each username can enrol once per database. **Never click Start as
+   `admin`**: it would record admin as the enrollee.
 5. As `admin`: **People → Petitions** (status Finalized, the collected data, the history).
 
 #### Optional: add approval
 
 An approver must be a Person **in that CO** with a login identifier and a verified email (`admin` cannot approve:
-it is not a Discovery TNG Person). For example Claude Larkin: add an Identifier `claude.larkin` (type Network, Login
-ticked), an Email Address (Force Verify), and membership of CO:approvers. Then add a Message Template with Context
-**Enrollment Handoff** (body with `(@ENTRY_URL)`), and a fourth step: `CoreEnroller.ApprovalCollectors`, Actor Type
-**Approver**, Handoff Message Template = that template. The Approver Group field only appears on the step's Edit
-page (a 5.2.0 bug); without it the CO's (or the petition COU's) approvers group is used. The enrollee then waits at
-"handoff", Claude gets an email with the link, approves in his own window, and the enrollee gets the welcome mail.
+it is not a Discovery TNG Person). For example Claude Larkin: add an Identifier (type **Network**, **Login** ticked)
+
+```
+claude.larkin
+```
+
+an Email Address (Force Verify), and membership of CO:approvers. Then add a Message Template with Context
+**Enrollment Handoff** (body with `(@ENTRY_URL)`), and a fourth step: **CoreEnroller.ApprovalCollectors**, Actor
+Type **Approver**, Handoff Message Template = that template. The Approver Group field only appears on the step's
+Edit page (a 5.2.0 bug); without it the CO's (or the petition COU's) approvers group is used. The enrollee then
+waits at "handoff", Claude gets an email with the link, approves in his own window, and the enrollee gets the
+welcome mail.
 
 ### Provisioning: File Provisioner
 
 Verified in Redcurrant University after the FileSource procedure (`tools/seed/topics.py`, stage `file`).
 
-1. **Connections → Provisioning Targets → Add a New Provisioning Target**: Description "File Export", Provisioning
-   Mode **Disabled** (the default, Queue on Error, is a trap: see below), Plugin `FileConnector.FileProvisioners`,
-   leave the rest → Save. The "Configure FileProvisioners" page has one field, **File Name**:
-   `/srv/provisioned/output.jsonl` → Save. (A file that doesn't exist is refused: 'The file "..." is not writable';
-   the kit creates this one.)
+1. **Connections → Provisioning Targets → Add a New Provisioning Target**: Provisioning Mode **Disabled** (the
+   default, Queue on Error, is a trap: see below), Plugin **FileConnector.FileProvisioners**, leave the rest, and
+   Description:
+
+   ```
+   File Export
+   ```
+
+   Save. The "Configure FileProvisioners" page has one field, File Name:
+
+   ```
+   /srv/provisioned/output.jsonl
+   ```
+
+   Save. (A file that doesn't exist is refused: 'The file "..." is not writable'; the kit creates this one.)
 2. Back on the target (PROPERTIES tab): Provisioning Mode **Immediate** → Save. Switching writes nothing by itself.
-3. Open `provisioned/output.jsonl` on the laptop (or `tail -f provisioned/output.jsonl`). Every change to a person
-   appends one JSON line per event, the whole person record (names, identifiers, roles, group memberships, with
-   every type and group nested: about 6.7 KB a line). Changing Ruth Spence's role title adds one line; expiring her
-   only role makes her ineligible and writes `{"id":45}`; adding someone to a group also writes the group.
+3. Open `provisioned/output.jsonl` on the laptop, or follow it in a terminal:
+
+   ```bash
+   tail -f provisioned/output.jsonl
+   ```
+
+   Every change to a person appends one JSON line per event, the whole person record (names, identifiers, roles,
+   group memberships, with every type and group nested: about 6.7 KB a line). Changing Ruth Spence's role title adds
+   one line; expiring her only role makes her ineligible and writes `{"id":45}`; adding someone to a group also
+   writes the group.
 4. **People already in the Registry are not written until something about them changes.** To push one person:
    person page → gear by the name → **Provisioning Status** → row gear → **Provision Now** → confirm. There is no
    flash; Last Status becomes "Provisioned", Last Comment "Wrote 1 record to file". To push everyone:
    **Provisioning Targets** → row gear → **Reprovision All** (no confirmation; "Reprovisioning for People, Groups
    queued for File Export (N)"). That only queues two jobs (Operations → Jobs); the kit has no queue runner, so run
-   it: `./workshop cake job -r -c 3`, or from PowerShell
-   `docker compose exec -u www-data -w /srv/comanage-registry/app registry ./bin/cake job -r -c 3`. The People job
-   writes 45 lines ("Reprovisioned 45 entities"); the Groups job reports 0 entities (a 5.2.0 bug).
+   it:
+
+   ```bash
+   ./workshop cake job -r -c 3
+   ```
+
+   or, from PowerShell:
+
+   ```bash
+   docker compose exec -u www-data -w /srv/comanage-registry/app registry ./bin/cake job -r -c 3
+   ```
+
+   The People job writes 45 lines ("Reprovisioned 45 entities"); the Groups job reports 0 entities (a 5.2.0 bug).
 
 ### Provisioning: SQL Provisioner
 
 Verified after the File Provisioner (`topics.py`, stage `sql`). SqlConnector must be active (Configuration step 1).
 
 1. **Connections → Related Configurations → Servers** (also Configuration → Servers) → **Add a New Server**:
-   Description "Target Database", Status Active, Plugin `CoreServer.SqlServers` → Save → "Configure SqlServers":
-   RDBMS Type **Postgres**, Hostname **`target-database`**, Port empty, Database Name **`target`**, Username
-   **`target_user`**, Password **`password`** → Save.
-2. **Provisioning Targets → Add**: Description "SQL Export", Mode **Disabled**, Plugin `SqlConnector.SqlProvisioners`
-   → Save → "Configure SqlProvisioners": Server **Target Database**, Table Name Prefix `sp_` (the default) → Save.
-   Saving creates 15 tables in the target database (`sp_people`, `sp_names`, `sp_identifiers`, `sp_person_roles`,
-   `sp_groups`, `sp_group_members`, `sp_types`, ...) and copies the reference data (Types, COUs, Groups). The
-   CONFIGURE PLUGIN tab also has **Reapply Target Database Schema** and **Resync Reference Data**.
+   Status **Active**, Plugin **CoreServer.SqlServers**, and Description:
+
+   ```
+   Target Database
+   ```
+
+   Save. On "Configure SqlServers": RDBMS Type **Postgres**, Port empty, and
+   - Hostname:
+
+     ```
+     target-database
+     ```
+
+   - Database Name:
+
+     ```
+     target
+     ```
+
+   - Username:
+
+     ```
+     target_user
+     ```
+
+   - Password:
+
+     ```
+     password
+     ```
+
+   Save.
+2. **Provisioning Targets → Add**: Mode **Disabled**, Plugin **SqlConnector.SqlProvisioners**, and Description:
+
+   ```
+   SQL Export
+   ```
+
+   Save. On "Configure SqlProvisioners": Server **Target Database**, Table Name Prefix `sp_` (already filled in) →
+   Save. Saving creates 15 tables in the target database (`sp_people`, `sp_names`, `sp_identifiers`,
+   `sp_person_roles`, `sp_groups`, `sp_group_members`, `sp_types`, ...) and copies the reference data (Types, COUs,
+   Groups). The CONFIGURE PLUGIN tab also has **Reapply Target Database Schema** and **Resync Reference Data**.
 3. Set the target's Mode to **Immediate**. Provisioning works as for the file: changes go out at once, Provision Now
    shows Last Comment "New record published", Reprovision All needs the job run above.
-4. Look at the result: `docker compose exec target-database psql -U target_user -d target`, then `\dt`, and:
+4. Look at the result. Open psql on the target database:
+
+   ```bash
+   docker compose exec target-database psql -U target_user -d target
+   ```
+
+   then list the tables with `\dt`, and query them:
 
    ```sql
    select p.id, p.status, n.given, n.family, i.identifier as login, r.title
@@ -258,8 +650,8 @@ Verified after the File Provisioner (`topics.py`, stage `sql`). SqlConnector mus
    order by n.family, n.given limit 5;
    ```
 
-   The `sp_` ids are the Registry's ids. Each HR person has two names in `sp_names`, as in the Registry: the primary
-   name and the copy linked to the HR record.
+   (`\q` quits.) The `sp_` ids are the Registry's ids. Each HR person has two names in `sp_names`, as in the
+   Registry: the primary name and the copy linked to the HR record.
 
 ### Enrollment: invitation
 
@@ -270,37 +662,115 @@ invitee accepts from the link in Mailpit, logs in with a new username, and becom
    needs CO Administrator. The platform administrator can't start such a flow in a CO where it isn't a Person (the
    browser ends in "too many redirects"), so the inviter must be a Person in the CO with a login identifier, in
    CO:admins. With the FileSource procedure done, Ruth Spence is the quickest: **Structure → Groups → CO:admins →
-   GROUP MEMBERS → Add member**, type "Spence", pick Ruth Spence; a "Group Member" dialog opens → Save → close it.
-   Logging in as `ruth.spence` (private window) now shows Redcurrant's full menus.
-2. **Message Templates** (Configuration → Personalization → **Message Templates** → Add), Format Plain Text:
-   - "Redcurrant Invitation", Context **Enrollment Handoff**, Subject `You are invited to join (@CO_NAME)`, body
-     `Hello (@ENROLLEE_NAME), you have been invited to join (@CO_NAME). Open this link to accept: (@ENTRY_URL)`.
-     The link is `(@ENTRY_URL)`; there is no invitation-specific substitution.
-   - "Redcurrant Welcome", Context **Enrollment Finalization**, Subject `Welcome to (@CO_NAME)`, body
-     `Hello (@ENROLLEE_NAME), your enrollment in (@CO_NAME) is complete. You can now log in.`
-3. **People → Enrollment Flows → Add**: Name "Invite a Member", Status Active, Petitioner Authorization **CO
-   Administrator**, tick **Collect Enrollee Email** (off by default; the invitation is sent to this address, not to
-   one collected later), Finalization Message Template "Redcurrant Welcome" → Save.
-4. **Enrollment Flow Steps → Add a New Enrollment Flow Step** (a dialog; Save switches it to the plugin's form, and
-   it stays open after the second Save: close it):
-   1. "Enter invitee details", Plugin `CoreEnroller.BasicAttributeCollectors`, Actor Type **Petitioner**, Order 1;
-      plugin form: Name Type Official, Email Address Type Official, Affiliation Type Member.
-   2. "Accept invitation", Plugin `CoreEnroller.InvitationAccepters`, Actor Type **Enrollee**, **Handoff Message
-      Template "Redcurrant Invitation"** (on the step's own form, not the plugin's), Order 2; plugin form:
-      **Invitation Validity `0`** (no expiry) and a Welcome Message. The validity is in **seconds**, although the
-      label says minutes: the default 1440 expires after 24 minutes.
-   3. "Link your login", Plugin `CoreEnroller.IdentifierCollectors`, Actor Type **Enrollee**, Order 3; plugin form:
-      Type **Network**, and press Save (the step needs its type).
-5. **Run it.** As `ruth.spence`: People → Enrollment Flows → row gear → **Start** → **Enrollee Email**, for example
-   `casey.invitee@redcurrant.example` → Save → step 1: Given Name, Family Name, Email Address → **Continue** →
-   "Enrollment Flow Handoff" ("Thank you for completing this Enrollment Flow Step..."). People → Petitions shows
-   it as Pending Acceptance.
+   GROUP MEMBERS → Add member**, type
+
+   ```
+   Spence
+   ```
+
+   and pick Ruth Spence; a "Group Member" dialog opens → Save → close it. Logging in as `ruth.spence` (private
+   window) now shows Redcurrant's full menus.
+2. **Message Templates** (Configuration → Personalization → **Message Templates** → Add), twice, each with Status
+   **Active** and Format **Plain Text**:
+   - Context **Enrollment Handoff**. Description, Subject, Message Body (the link is `(@ENTRY_URL)`; there is no
+     invitation-specific substitution):
+
+     ```
+     Redcurrant Invitation
+     ```
+     ```
+     You are invited to join (@CO_NAME)
+     ```
+     ```
+     Hello (@ENROLLEE_NAME),
+
+     You have been invited to join (@CO_NAME).
+
+     To accept the invitation, open this link:
+
+     (@ENTRY_URL)
+
+     You will be asked to log in. Use the username you want to keep for (@CO_NAME).
+
+     This message was sent to (@ENROLLEE_EMAIL).
+     ```
+
+   - Context **Enrollment Finalization**. Description, Subject, Message Body:
+
+     ```
+     Redcurrant Welcome
+     ```
+     ```
+     Welcome to (@CO_NAME)
+     ```
+     ```
+     Hello (@ENROLLEE_NAME),
+
+     Your enrollment in (@CO_NAME) is complete.
+
+     Log in to the Registry with the same username you used to accept the invitation.
+     ```
+
+3. **People → Enrollment Flows → Add**: Status **Active**, Petitioner Authorization **CO Administrator**, tick
+   **Collect Enrollee Email** (off by default; the invitation is sent to this address, not to one collected later),
+   Finalization Message Template **Redcurrant Welcome**, and Name:
+
+   ```
+   Invite a Member
+   ```
+
+4. **Enrollment Flow Steps → Add a New Enrollment Flow Step**, three times (a dialog; Save switches it to the
+   plugin's form, and it stays open after the second Save: close it). Description, then the plugin's settings:
+   1. Plugin **CoreEnroller.BasicAttributeCollectors**, Actor Type **Petitioner**, Order 1; plugin form: Name Type
+      **Official**, Email Address Type **Official**, Affiliation Type **Member**:
+
+      ```
+      Enter invitee details
+      ```
+
+   2. Plugin **CoreEnroller.InvitationAccepters**, Actor Type **Enrollee**, **Handoff Message Template: Redcurrant
+      Invitation** (on the step's own form, not the plugin's), Order 2; plugin form: Invitation Validity and Welcome
+      Message. The validity is in **seconds**, although the label says minutes (the default 1440 expires after 24
+      minutes); `0` means no expiry.
+
+      ```
+      Accept invitation
+      ```
+      ```
+      0
+      ```
+      ```
+      Welcome to Redcurrant University. Please accept your invitation to continue.
+      ```
+
+   3. Plugin **CoreEnroller.IdentifierCollectors**, Actor Type **Enrollee**, Order 3; plugin form: Type
+      **Network**, and press Save (the step needs its type).
+
+      ```
+      Link your login
+      ```
+
+5. **Run it.** As `ruth.spence`: People → Enrollment Flows → row gear → **Start** → Enrollee Email, for example
+
+   ```
+   casey.invitee@example.org
+   ```
+
+   Save → step 1: Given Name, Family Name and Email Address (the same address) → **Continue** → "Enrollment Flow
+   Handoff" ("Thank you for completing this Enrollment Flow Step..."). People → Petitions shows it as Pending
+   Acceptance.
 6. In Mailpit, "You are invited to join Redcurrant University" has the link
    (`https://localhost:8443/registry/petitions/continue/N?token=...`). **Copy it into a new private window** that
-   isn't logged in → "Accept this invitation?" → **Accept** → **Continue** → the login prompt: a new username, for
-   example `casey.invitee`, empty password → "Enrollment Complete", flash "Petition Finalized", and the welcome mail
-   arrives. `casey.invitee` now has a Network login identifier and lands on Redcurrant's dashboard. If the
-   provisioners are Immediate, Casey is in `output.jsonl` and `sp_people` straight away.
+   isn't logged in → "Accept this invitation?" → **Accept** → **Continue** → the login prompt: a new username,
+   empty password, for example
+
+   ```
+   casey.invitee
+   ```
+
+   → "Enrollment Complete", flash "Petition Finalized", and the welcome mail arrives. `casey.invitee` now has a
+   Network login identifier and lands on Redcurrant's dashboard. If the provisioners are Immediate, Casey is in
+   `output.jsonl` and `sp_people` straight away.
 
 Decline instead: the page still says "Enrollment Complete ... has been finalized" with the flash "Invitation
 Declined"; the petition is Declined and nobody is mailed.

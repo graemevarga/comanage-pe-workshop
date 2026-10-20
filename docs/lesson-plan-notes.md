@@ -47,19 +47,49 @@ follow the CSV v3 rules in the [instructor guide](instructor-guide.md#lauras-csv
 ## Commands participants may type
 
 Only a few things need a terminal. These forms work in macOS Terminal, Windows PowerShell and Linux, run in the
-`comanage-pe-workshop` folder:
+`comanage-pe-workshop` folder. With the ids from a fresh install that follows the instructor guide's order
+(Redcurrant University is CO 3, the HR file source is 1); the ids appear in the page addresses (`co_id=3`,
+`external-identity-sources/edit/1`).
 
-| To | Command |
-|---|---|
-| Run a full FileSource sync (5.2.0 has no button for it) | `docker compose exec -u www-data -w /srv/comanage-registry/app registry ./bin/cake job -c <CO id> -j CoreJob.SyncJob -s external_identity_source_id=<source id>` |
-| Run queued jobs, for example after Reprovision All | `docker compose exec -u www-data -w /srv/comanage-registry/app registry ./bin/cake job -r -c <CO id>` |
-| Look at the SQL Provisioner's tables | `docker compose exec target-database psql -U target_user -d target`, then `\dt` and `select * from <table>;` |
-| Start over from a fresh install | `docker compose down -v`, then `docker compose up --wait` |
+A full FileSource sync (5.2.0 has no button for it):
+
+```bash
+docker compose exec -u www-data -w /srv/comanage-registry/app registry ./bin/cake job -c 3 -j CoreJob.SyncJob -s external_identity_source_id=1
+```
 
 The sync prints the Registry's (very verbose) log. To see the result, open the job in the CO under **Operations →
 Jobs** (the list itself only says "Started via JobCommand"): its summary reads "Sync Finished (45 new, 0 updated,
-0 errors, 45 total)". The ids appear in the page addresses (`co_id=3`,
-`external-identity-sources/edit/1`).
+0 errors, 45 total)".
+
+Run queued jobs, for example after Reprovision All:
+
+```bash
+docker compose exec -u www-data -w /srv/comanage-registry/app registry ./bin/cake job -r -c 3
+```
+
+Look at the SQL Provisioner's tables (`\dt` lists them, `\q` quits):
+
+```bash
+docker compose exec target-database psql -U target_user -d target
+```
+
+Start over from a fresh install:
+
+```bash
+docker compose down -v
+```
+
+```bash
+docker compose up --wait
+```
+
+## Formatting the lesson plan
+
+Put every value participants type or paste (names, descriptions, paths, hostnames, message template subjects and
+bodies, usernames, commands) in a code block of its own: GitHub and most viewers show a copy button on each block,
+which saves typos. Menu paths and drop-down choices read fine in bold. The
+[instructor guide](instructor-guide.md#verified-procedures) and the [participant guide](participant-guide.md) follow
+this convention, so their blocks can be copied straight into the lesson plan.
 
 ## FileSource in 5.2.0
 
