@@ -10,10 +10,12 @@ see [Running it yourself](at-home.md).
 |---|---|---|
 | `registry` | The image `container/build.sh -s 1 --label 5.2.0 registry basic-auth` builds from the 5.2.0 release, unmodified (this repository's workflow runs exactly that and pushes the result to GHCR). Upstream's entrypoint (`docker-comanage-entrypoint` → `comanage_utils.sh`) writes `local/config/database.php` from the environment, prepares Apache, waits for the database, runs `bin/cake database` and `bin/cake setup`, clears caches, then starts Apache. | The same image (or the shibboleth-sp-supervisor / mod_auth_openidc variant) |
 | `registry-database` | Official `postgres:17`, data in the named volume `registry-database` | Your PostgreSQL service, backed up |
+| `target-database` | A second `postgres:17` (database `target`, user `target_user`), named volume `target-database` | The application database a SQL Provisioner writes to |
 | `mailpit` | Official Mailpit image, accepting any SMTP credentials without TLS | Your campus SMTP relay |
+| `workshop-setup` | `postgres:17` running [setup/setup.sh](../setup/setup.sh) once, after the Registry's first start: it inserts the Outgoing SMTP Server for Mailpit (the rows the UI writes) and creates the File Provisioner's output file `provisioned/output.jsonl`, writable by the web server, then exits. Mailpit waits for it, so `docker compose up --wait` returns only when everything is ready | Configure your SMTP relay in the UI once (COmanage CO → Configuration → Servers, then CO Settings) |
 
 There is no job-runner container: 5.2.0's `build.sh` lists a `crond` product whose Dockerfile is missing from the
-release, and the workshop's chapters don't need queued jobs. In production, schedule
+release, and the lesson doesn't need queued jobs. In production, schedule
 `bin/cake job -r -c <co_id>` (and FileSource syncs) with cron, a Kubernetes CronJob or a small loop container
 running the same image.
 
@@ -53,14 +55,19 @@ At home, delete those two files (or the volume line) and you have upstream's bas
 htpasswd at `/etc/apache2/basic-auth`. For a shared machine that still wants personas, `AuthBasicProvider file anon`
 makes `admin` require its htpasswd password while every other username stays anonymous.
 
-## Data and checkpoints
+## Data, files and checkpoints
 
+- Participants start from upstream's first start plus the `workshop-setup` step: no COs, no people, no active
+  plugins. Everything else is built in the UI during the lesson.
 - The FileSource input files are mounted read-only at `/srv/filesource` (from `filesource/`). Any path the web server
   user (www-data, uid 33) can read works; FileSource re-reads the file on every sync.
-- Checkpoints are plain `pg_dump -Fc` files in `checkpoints/`, made and restored by the database container's own
-  `pg_dump`/`pg_restore` (`./workshop checkpoint` / `restore`). A restore recreates the `registry` database and
-  restarts the `registry` container, whose entrypoint clears CakePHP's caches. They are produced by
-  `tools/seed/seed-all.sh`, which drives the UI with Playwright from a fresh install.
+- The File Provisioner appends JSON lines to `/srv/provisioned/output.jsonl`, a bind mount of `provisioned/`, so
+  participants can open the output on their laptop. 5.2.0 only accepts a file that already exists and is writable by
+  www-data, so the setup step creates it (mode 0666, folder 0777 for Linux hosts; Docker Desktop doesn't care).
+- Checkpoints are plain `pg_dump -Fc` files in `checkpoints/` (not committed), made and restored by the database
+  container's own `pg_dump`/`pg_restore` (`./workshop checkpoint` / `restore`). A restore recreates the `registry`
+  database and restarts the `registry` container, whose entrypoint clears CakePHP's caches. `tools/seed/seed-all.sh`
+  walks through the lesson's procedures with Playwright from a fresh install and saves one after each chapter.
 - Run `bin/cake` as **www-data** (`docker compose exec -u www-data ...`): the image's entrypoint only fixes the
   ownership of `app/tmp`, but v5 keeps its cache in `local/tmp`, so cache files created by root break the web server.
 

@@ -1,8 +1,9 @@
-"""Re-create the workshop checkpoints by driving the Registry UI like a participant would.
+"""Walk through workshop procedures by driving the Registry UI like a participant would.
 
-Run through tools/seed/seed-all.sh, which resets the container, runs each stage here and saves a checkpoint
-after each one. Stage N expects the state of checkpoint N-1.  Usage: python seed.py STAGE
-Values come from the v5.2 course material (Laura Paglione's screenshots) where it shows them.
+Run through tools/seed/seed-all.sh, which resets the kit (a fresh install, as participants start), runs each stage
+here and saves a checkpoint after each one. Stage N expects the state after stage N-1.  Usage: python seed.py STAGE
+The current stages follow the procedures in docs/instructor-guide.md (values from Laura Paglione's early
+screenshots); rewrite them to follow the lesson plan.
 """
 import re
 import sys
@@ -49,19 +50,17 @@ def activate_plugin(r, plugin):
     print(f"  activated {plugin}: {r.flashes()}")
 
 
-# ---- 01-email: Mailpit as the COmanage CO's Outgoing SMTP Server; the admin gets a verified address -----------
+# ---- 01-email: the setup step's Outgoing SMTP Server shows in the UI; the admin gets a verified address ---------
 def stage_01(r):
-    r.go("servers/add?co_id=1")
-    r.fill({"description": SMTP_SERVER, "status": "A", "plugin": "CoreServer.SmtpServers"})
-    r.save("add SMTP server")
-    r.fill({"hostname": "mailpit", "port": "1025", "username": "", "password": "", "use_tls": False,
-            "default_from": "registry@workshop.test", "default_reply_to": "noreply@workshop.test",
-            "override_to": ""})
-    r.save("configure SMTP server")
+    # workshop-setup (setup/mail.sql) inserted the server; check the UI sees it the way it sees one it made itself.
+    r.go("servers/index?co_id=1")
+    if SMTP_SERVER not in r.page.content():
+        raise RegistryError(f"{SMTP_SERVER!r} not in the COmanage CO's servers")
     r.shot("smtp-server")
     co_settings(r, 1)
-    r.set("email_smtp_server_id", {"label": SMTP_SERVER})
-    r.save("CO settings: outgoing SMTP server")
+    chosen = r.page.locator('form select[name="email_smtp_server_id"] option:checked').inner_text().strip()
+    if chosen != SMTP_SERVER:
+        raise RegistryError(f"CO Settings > Outgoing SMTP Server is {chosen!r}")
     r.shot("co-settings")
     # A verified address for the platform admin (Person 1), so "workshop mail-test 1" works straight away
     r.go("email-addresses/add?person_id=1")

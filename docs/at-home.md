@@ -143,5 +143,6 @@ Restoring is what `./workshop restore` does: drop and recreate the database, `pg
 | Demo salt and database password in the compose file | Secrets |
 | Mailpit | Your SMTP relay |
 | Ports on 127.0.0.1:8443 | 443, reachable by your users |
+| Outgoing SMTP Server inserted by `workshop-setup` | Added once in the UI (section 4) |
 | No job runner | cron or your scheduler, as above |
 | Checkpoints | Real backups |

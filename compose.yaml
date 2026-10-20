@@ -8,8 +8,8 @@
 #   target-database    a second PostgreSQL, standing in for an application database the SQL Provisioner writes to
 #   mailpit            catches all outgoing mail (stands in for your campus SMTP relay)
 #   workshop-setup     runs once after the Registry's first start and prepares what the lesson needs around it
-#                      (setup/setup.sh: points the Registry's outgoing mail at Mailpit, makes provisioned/
-#                      writable for the web server), then exits
+#                      (setup/setup.sh: points the Registry's outgoing mail at Mailpit, creates the File
+#                      Provisioner's output file provisioned/output.jsonl), then exits
 #
 #   docker compose up --wait   starts everything and returns when the Registry is ready; then open
 #                              https://localhost:8443/registry/ and log in as "admin" (empty password)

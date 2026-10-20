@@ -1,8 +1,9 @@
 # Instructor guide
 
-For whoever runs the demo: what each chapter shows, the exact click paths in Registry 5.2.0, the commands, and the
-traps. Participants' instructions are in [participant-guide.md](participant-guide.md); how the containers map to a
-real deployment is in [design-notes.md](design-notes.md).
+For whoever presents the workshop. Laura Paglione's lesson plan, docs and slides are the script; this guide covers
+preparing the kit, checking the lesson plan's procedures against it, presenting, and the 5.2.0 behaviour behind the
+procedures. Participants' instructions are in [participant-guide.md](participant-guide.md); how the containers map to
+a real deployment is in [design-notes.md](design-notes.md).
 
 Conventions: **Configuration → API Users** means the left navigation's *Configuration* panel, then that link.
 `./workshop ...` is run from the repository directory; it prints the `docker compose` command it runs, which is
@@ -10,48 +11,63 @@ worth showing on screen: it is the same command participants would use with thei
 
 ## Before the workshop
 
-- [ ] `docker compose pull && docker compose up -d` on the demo laptop; log in as `admin`; open Mailpit.
-- [ ] Ask participants to pull the images at home (participant guide, "Before the workshop"). For the room, bring USB
-      copies: `docker save ghcr.io/graemevarga/comanage-registry:5.2.0-basic-auth-1 -o registry-amd64.tar`, and
+- [ ] Send participants the [participant guide](participant-guide.md) ("Before the workshop") a week ahead; it has
+      them download the images and test the kit at home.
+- [ ] Check the lesson plan: run its procedures on a fresh kit (see [Checking the lesson plan](#checking-the-lesson-plan)),
+      and save a checkpoint at the start of each chapter on the presenting laptop, so you can jump ahead if a live
+      step goes wrong.
+- [ ] On the presenting laptop: `docker compose up --wait`, log in as `admin`, open Mailpit.
+- [ ] For participants who couldn't download beforehand, bring USB copies of the images:
+      `docker save ghcr.io/graemevarga/comanage-registry:5.2.0-basic-auth-1 -o registry-amd64.tar`, and
       `postgres:17` and `axllent/mailpit:v1.31.6` saved once per architecture
       (`docker pull --platform linux/arm64 ...` then `docker save`). Participants run `docker load -i <file>`.
-- [ ] Apple Silicon participants run the Registry under emulation: the first start and each restore take longer.
+- [ ] Apple Silicon participants run the Registry under emulation: the first start takes longer.
 - [ ] Presenting: zoom the browser to 125-150%, use a private window per persona, keep Mailpit in a second tab.
 
 ## How the kit fits together
 
 | Where | What |
 |---|---|
+| `docker compose up --wait` | Starts everything and returns when it is ready. On an empty database it is the Registry's real first start, followed by the `workshop-setup` step |
 | `https://localhost:8443/registry/` | The Registry. Login: any username, empty password; `admin` is the platform administrator |
 | `http://localhost:8025/` | Mailpit: every message the Registry sends |
-| `./workshop restore NN-name` | Jump to a checkpoint (one per chapter, below); `./workshop list` shows them; `./workshop reset` = fresh install |
-| `./workshop sync <co> <eis>` | Full FileSource sync (command line only in 5.2.0) |
 | `filesource/` | The CSV files, at `/srv/filesource/` in the registry container (read-only, re-read on every sync) |
-| `tools/seed/` | Scripts that build the checkpoints by driving the UI; screenshots of every step land in `tools/seed/out/` |
+| `provisioned/` | File Provisioner output, at `/srv/provisioned/` in the registry container |
+| `target-database` | SQL Provisioner target: database `target`, user `target_user`, password `password`, port 5432 (`docker compose exec target-database psql -U target_user -d target`) |
+| `./workshop sync <co> <eis>` | Full FileSource sync (command line only in 5.2.0) |
+| `./workshop checkpoint NAME` / `restore NAME` / `reset` | Save and restore the Registry database; `reset` = fresh install |
+| `tools/seed/` | Playwright scripts that walk through procedures in the UI; screenshots of every step land in `tools/seed/out/` |
 
-Ids after the checkpoints: COs COmanage **1**, Discovery TNG **2**, Redcurrant University **3**, Guests **4**,
-MESS **5**. External Identity Source "HR File" is **1**. The HR people are Person ids 2-46 (in SORID order),
-Lamar Martin 47, Claude Larkin 48.
+## What participants start with
 
-## Chapter 1: Fresh install and mail (result: `01-email`)
+`docker compose up --wait` on an empty database runs the Registry's first start (`bin/cake database` creates the
+schema, `bin/cake setup` creates the COmanage CO and the platform administrator `admin`), then the `workshop-setup`
+step points the Registry's outgoing mail at Mailpit. Nothing else: no COs, no people, and the plugins are installed
+but Suspended. Logging in as `admin` lands on the COmanage CO dashboard ("This is the COmanage CO, which is used for
+platform wide configurations.").
 
-1. `docker compose up -d` on an empty database is the Registry's real first start: `bin/cake database` creates the
-   schema and `bin/cake setup` creates the COmanage CO and the platform administrator (`admin`, from
-   `COMANAGE_REGISTRY_ADMIN_USERNAME`). Open the Registry, accept the certificate warning, click **Login**, type
-   `admin`, leave the password empty. The admin lands on the COmanage CO dashboard ("This is the COmanage CO, which is
-   used for platform wide configurations.").
-2. Mail: 5.2 ignores the container's email variables. **Configuration → Servers → Add a New Server**: Description
-   "Mailpit (workshop mail catcher)", Status Active, Plugin `CoreServer.SmtpServers` → Save → Hostname **`mailpit`** (the compose service
-   name), Port **1025**, untick **Use TLS**, Default From `registry@workshop.test`, Default Reply-To
-   `noreply@workshop.test`, leave Username and Password empty → Save.
-3. **Configuration → CO Settings** → *Outgoing SMTP Server*: that server → Save. Set on the COmanage CO, it applies to
-   every CO.
-4. The admin's address: user menu → **my canvas** → **Add Attribute** → Email Address `admin@workshop.test`, type
-   Official → Save → **Force Verify** (it skips the verification email; pressing it again on a verified address gives
-   HTTP 500 in 5.2.0).
-5. `./workshop mail-test 1`: the test message appears in Mailpit.
+## Verified procedures
 
-## Chapter 2: Configuration (result: `02-configuration`)
+The procedures below were worked out from Laura's early screenshots and verified on 5.2.0 in this kit. The lesson
+plan decides what participants actually do; use these for the click paths and the traps. If you follow them in
+order on a fresh install, the ids are: COs COmanage **1**, Discovery TNG **2**, Redcurrant University **3**,
+Guests **4**, MESS **5**; External Identity Source "HR File" **1**; the HR people are Person ids 2-46 (in SORID
+order), Lamar Martin 47, Claude Larkin 48.
+
+### Mail (done by the setup step)
+
+The setup step does what the platform administrator would do in the COmanage CO: **Configuration → Servers → Add a
+New Server**: Description "Mailpit (workshop mail catcher)", Status Active, Plugin `CoreServer.SmtpServers` → Save →
+Hostname **`mailpit`** (the compose service name), Port **1025**, untick **Use TLS**, Default From
+`registry@workshop.test`, Default Reply-To `noreply@workshop.test`, Username and Password empty → Save; then
+**Configuration → CO Settings** → *Outgoing SMTP Server*: that server → Save. Set on the COmanage CO, it applies to
+every CO. Show these two pages: they are what participants will do at home.
+
+To test mail from the command line, the recipient needs a verified address: user menu → **my canvas** → **Add
+Attribute** → Email Address `admin@workshop.test`, type Official → Save → **Force Verify** (pressing it again on a
+verified address gives HTTP 500 in 5.2.0); then `./workshop mail-test 1`.
+
+### Configuration
 
 1. **Configuration → Platform-Wide Configuration → Plugins**: on the **FileConnector** row, gear menu → **Activate**
    ("Plugin Activated"). Same for **PipelineToolkit**. Activation applies the plugin's database schema at once.
@@ -64,7 +80,7 @@ Lamar Martin 47, Claude Larkin 48.
 3. In Discovery TNG: **Configuration → Types → Add a New Type**: Attribute `PersonRoles.affiliation_type`, Display
    Name "Principal Investigator", Database Value `principal-investigator`.
 
-## Chapter 3: Connections (result: `03-connections`)
+### Connections
 
 1. In Redcurrant University: **Connections → Pipelines → Add a New Pipeline**: Description "Process HR API Inputs",
    Status Active, Match Strategy **Identifier**, Identifier Type **UID** (appears after choosing Identifier),
@@ -74,9 +90,9 @@ Lamar Martin 47, Claude Larkin 48.
    typing it yourself gives `co_3.co_3.hr_api_user`). Open the user and click **Generate API Key**: the key is shown
    once, and every visit to that page generates a new one.
 
-### Optional: push a person through the API (ApiConnector)
+#### Optional: push a person through the API (ApiConnector)
 
-Not part of the checkpoints yet (see question 1 in [laura-alignment.md](laura-alignment.md)); verified working:
+Verified working:
 
 1. Activate **ApiConnector** on the Plugins page (COmanage CO).
 2. Redcurrant: **Connections → External Identity Sources → Add**: Description "HR API", Status **Manual**, Plugin
@@ -100,7 +116,7 @@ Not part of the checkpoints yet (see question 1 in [laura-alignment.md](laura-al
    `identifiers`, `emailAddresses` (use `address`, not `mail`), `telephoneNumbers`, `addresses`, `urls`, `roles`
    (needs `roleIdentifier` and `status`), `dateOfBirth`; every list entry needs a `type` that exists in the CO.
 
-## Chapter 4: FileSource (result: `04-filesource-synced`)
+### FileSource
 
 1. **Connections → Pipelines → Add**: "Process HR File Inputs", same settings as chapter 3.
 2. Open it, click **Flanges** → **Add**: Description "Login identifiers from uid", Status **Build Related Attributes**,
@@ -123,11 +139,11 @@ Not part of the checkpoints yet (see question 1 in [laura-alignment.md](laura-al
 
 Exercise: add a second source for `registrar.csv` (same pipeline, System of Record Label `registrar`, File Name
 `/srv/filesource/registrar.csv`), then `./workshop sync 3 2`: 45 more people, with eppn identifiers, who log in with
-their uid (e.g. `lamar.martin`). Do it before chapter 5 or from `04-filesource-synced`: chapter 5 creates Lamar
+their uid (e.g. `lamar.martin`). Do it before the organisational structure procedure, which creates Lamar
 Martin by hand without a uid, so a later registrar sync makes a second Lamar Martin. Source ids are in the source's
 URL (`external-identity-sources/edit/N`).
 
-## Chapter 5: Organisational structure (result: `05-org-structure`)
+### Organisational structure
 
 Redcurrant University:
 
@@ -140,7 +156,7 @@ Redcurrant University:
    CO:COU:Faculty/Staff:admins and CO:COU:Retirees:admins (group → **Group Members** → *Add member* picker).
 4. Ruth Spence (from the HR file) → **Person Roles → Add**: COU Faculty/Staff, Affiliation Member, Status Active,
    Title "Associate Professor", Department "Biology".
-5. Live sequence (not in the checkpoint): set that role's Status to **Expired** → Ruth shows *Expired* and keeps only
+5. Live sequence: set that role's Status to **Expired** → Ruth shows *Expired* and keeps only
    the `members:all` groups; add a second role in COU **Retirees** (Active) → she is Active again, in
    `CO:COU:Retirees:members:active` and, through the nesting, in **Access-wiki**. Memberships update immediately.
 
@@ -152,10 +168,10 @@ Discovery TNG:
    groups: CO:members:active/all and CO:COU:arbovirus:members:active/all.
 8. **Structure → Groups → CO:mfaexempt** → Description "MFA Exemptions".
 
-## Chapter 6: Enrollment (result: `06-enrollment`)
+### Enrollment: self-signup
 
-The flow in the checkpoint is Discovery TNG's **"Join Discovery TNG"**: anyone who logs in can sign up, verifies
-their email with a code from Mailpit, and gets a login identifier and a role in COU arbovirus.
+Discovery TNG's **"Join Discovery TNG"**: anyone who logs in can sign up, verifies their email with a code from
+Mailpit, and gets a login identifier and a role in COU arbovirus.
 
 1. **Configuration → Message Templates → Add**, twice (Status Active, Format Plain Text):
    - "Discovery TNG Email Verification", Context **Verification**, Subject `(@CO_NAME) email verification code`, body
@@ -180,7 +196,7 @@ their email with a code from Mailpit, and gets a login identifier and a role in 
    Each username can enrol once per database. **Never click Start as `admin`**: it would record admin as the enrollee.
 5. As `admin`: **People → Petitions** (status Finalized, the collected data, the history).
 
-### Optional: add approval
+#### Optional: add approval
 
 An approver must be a Person **in that CO** with a login identifier and a verified email (`admin` cannot approve:
 it is not a Discovery TNG Person). For example Claude Larkin: add an Identifier `claude.larkin` (type Network, Login
@@ -202,15 +218,20 @@ page (a 5.2.0 bug); without it the CO's (or the petition COU's) approvers group 
 - v4-style files (like Shayna's) convert with `python3 tools/convert_v4_csv.py IN.csv OUT.csv --uid`.
 - Only fictional people. Rows deleted from the file are **not** processed in 5.2.0.
 
-## Regenerating the checkpoints
+## Checking the lesson plan
 
-```bash
-tools/seed/seed-all.sh           # all six from a fresh install (about two minutes); "tools/seed/seed-all.sh 05" for 05-06
-```
+Laura won't be in the room, so check every procedure in the lesson plan on a fresh kit before the workshop:
 
-`seed-all.sh` drives the same screens as above with Playwright (in a container; nothing to install) and uses
-`./workshop` for the command-line steps. Values live in `tools/seed/seed.py`. To save a hand-made state instead:
-`./workshop checkpoint 07-my-demo "what it contains"`.
+1. `./workshop reset` (a fresh install, exactly what participants start with).
+2. Follow the lesson plan literally, as a participant would, in a private browser window. Note every place where a
+   screen, a label, a value or a result differs from the text, and send those to Laura.
+3. At the start of each chapter, `./workshop checkpoint NN-chapter "what is in it"`, so you can restore it while
+   presenting.
+
+`tools/seed/` automates this: `seed.py` has one function per stage that drives the same screens with Playwright (in
+a container; nothing to install), and `seed-all.sh` runs the stages from a fresh install and saves a checkpoint after
+each. The current stages follow the procedures above; rewrite them to follow the lesson plan, and the run doubles as
+a regression test when Laura revises it. Screenshots of every step land in `tools/seed/out/`.
 
 ## Known 5.2.0 traps
 
@@ -236,4 +257,4 @@ tools/seed/seed-all.sh           # all six from a fresh install (about two minut
 - `docker compose ps` (health), `docker compose logs registry | grep -v ' debug: '` (web requests and start-up),
   `./workshop psql` (database). `COMANAGE_DEBUG=1` on the registry service shows the entrypoint's start-up output
   (and turns on CakePHP debug mode).
-- Lost the plot: `./workshop restore <checkpoint>`. Start over: `./workshop reset`.
+- Lost the plot: `./workshop restore <checkpoint>` (one you saved). Start over: `./workshop reset`.

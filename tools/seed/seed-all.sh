@@ -1,22 +1,23 @@
 #!/bin/bash
 #
-# Re-create every workshop checkpoint (instructors and maintainers).
+# Walk through the workshop procedures on a fresh kit and save a checkpoint after each stage (instructors).
 #
 #   tools/seed/seed-all.sh [FIRST_STAGE]     e.g. "tools/seed/seed-all.sh 05" redoes 05 and 06 only
 #
-# Starts from the Registry's real first start ("./workshop reset": empty database, upstream setup), or from the
-# checkpoint before FIRST_STAGE, then for each stage drives the UI with Playwright (tools/seed/seed.py), runs the
-# command-line steps and saves the checkpoint into checkpoints/. Screenshots of every step land in tools/seed/out/.
+# Starts from what participants get ("./workshop reset": empty database, upstream setup, then the workshop-setup
+# step), or from the checkpoint saved before FIRST_STAGE, then for each stage drives the UI with Playwright
+# (tools/seed/seed.py), runs the command-line steps and saves a checkpoint into checkpoints/ (not committed).
+# Screenshots of every step land in tools/seed/out/. A failing stage stops the run: that procedure needs a look.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 first="${1:-01}"
 ui() { tools/seed/pw seed.py "$@"; }
 stage_wanted() { [[ "$1" > "${first}" || "$1" == "${first}" ]]; }
 
-docker compose up -d
 if [[ "${first}" == "01" ]]; then
     ./workshop reset
 else
+    docker compose up --wait
     prev=$(printf '%02d' $((10#${first} - 1)))
     ./workshop restore "$(basename "$(ls checkpoints/${prev}-*.dump)" .dump)"
 fi
@@ -24,7 +25,7 @@ rm -f tools/seed/out/s*.png
 
 if stage_wanted 01; then
     ui 01
-    ./workshop checkpoint 01-email "Fresh install plus Mailpit as the Outgoing SMTP Server; admin has a verified email (admin@workshop.test)"
+    ./workshop checkpoint 01-email "Fresh install (mail goes to Mailpit); admin has a verified email (admin@workshop.test)"
 fi
 if stage_wanted 02; then
     ui 02

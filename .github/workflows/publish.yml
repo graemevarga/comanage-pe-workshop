@@ -1,5 +1,5 @@
 # Build the COmanage Registry 5.2.0 image exactly as the upstream release builds it (its own container/build.sh,
-# basic-auth variant, unmodified), push it to GHCR, then start the workshop's compose stack with it and check it.
+# basic-auth variant, unmodified), push it to GHCR, then run the participants' one command with it and check the result.
 #
 # Release: push a tag such as v5.2.0-1  ->  ghcr.io/graemevarga/comanage-registry:5.2.0-basic-auth-1
 #          (the number after the dash is upstream build.sh's tag suffix).
@@ -81,16 +81,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Start the stack (first start on an empty database)
+      - name: The participants' one command (first start on an empty database)
         run: |
-          docker compose up -d
-          for _ in $(seq 1 90); do
-            [ "$(docker inspect -f '{{.State.Health.Status}}' "$(docker compose ps -q registry)")" = healthy ] && break
-            sleep 5
-          done
-          docker compose ps
+          timeout 900 docker compose up --wait
+          docker compose ps -a
 
-      - name: Anonymous login, Mailpit, checkpoints
+      - name: Login, mail, files, provisioning targets
         run: |
           set -x
           base=https://localhost:8443/registry
@@ -98,12 +94,23 @@ jobs:
           test "$(curl -ks -o /dev/null -w '%{http_code}' "$base/auth/login/login.php")" = 401
           test "$(curl -ks -u admin: -o /dev/null -w '%{http_code}' "$base/auth/login/login.php")" = 302
           test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8025/)" = 200
-          ./workshop restore 04-filesource-synced
-          test "$(docker compose exec -T registry-database psql -U registry_user -d registry -Atc \
-            "select count(*) from people where co_id = 3 and person_id is null and deleted is not true")" = 45
-          ./workshop restore 06-enrollment
+          # The setup step wired mail: give admin a verified address (test only) and send through it.
+          docker compose exec -T registry-database psql -U registry_user -d registry -v ON_ERROR_STOP=1 -c \
+            "insert into email_addresses (person_id, mail, type_id, verified, created, modified, revision, deleted)
+             select 1, 'admin@workshop.test', id, true, now(), now(), 0, false from types
+             where co_id = 1 and attribute = 'EmailAddresses.type' and value = 'official'"
           ./workshop mail-test 1
+          sleep 2
           curl -s http://localhost:8025/api/v1/messages | grep -q 'TestCommand Test Message'
+          # FileSource input readable, File Provisioner output writable, SQL Provisioner target reachable.
+          docker compose exec -T -u www-data registry test -r /srv/filesource/hr.csv
+          docker compose exec -T -u www-data registry test -w /srv/provisioned/output.jsonl
+          docker compose exec -T registry php -r \
+            'new PDO("pgsql:host=target-database;dbname=target", "target_user", "password"); echo "target ok\n";'
+          # Running the one command again changes nothing.
+          docker compose up --wait
+          test "$(docker compose exec -T registry-database psql -U registry_user -d registry -Atc \
+            "select count(*) from servers")" = 1
 
       - name: Logs on failure
         if: failure()
@@ -128,12 +135,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Start the stack with an emulated registry container
+      - name: The participants' one command, with an emulated registry container
         run: |
-          docker compose up -d
-          for _ in $(seq 1 120); do
-            [ "$(docker inspect -f '{{.State.Health.Status}}' "$(docker compose ps -q registry)")" = healthy ] && break
-            sleep 10
-          done
-          docker compose ps
+          timeout 1800 docker compose up --wait
+          docker compose ps -a
           test "$(curl -ks -u admin: -o /dev/null -w '%{http_code}' https://localhost:8443/registry/auth/login/login.php)" = 302

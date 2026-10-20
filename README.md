@@ -39,7 +39,7 @@ A fresh install, plus only what the lesson needs around it. Everything else you 
 | Registry | Upstream's first start: the COmanage CO and the platform administrator `admin`. Plugins are installed but not active; you activate them during the lesson. |
 | Mail | The Registry's outgoing mail already goes to Mailpit (an Outgoing SMTP Server on the COmanage CO, host `mailpit`, port 1025) |
 | FileSource input | `filesource/hr.csv` and `filesource/registrar.csv` (fictional people, CSV v3), at `/srv/filesource/` in the Registry |
-| File Provisioner output | The `provisioned/` folder, at `/srv/provisioned/` in the Registry |
+| File Provisioner output | `provisioned/output.jsonl`, at `/srv/provisioned/output.jsonl` in the Registry |
 | SQL Provisioner target | A separate PostgreSQL database: host `target-database`, database `target`, user `target_user`, password `password` |
 
 ## What is running
