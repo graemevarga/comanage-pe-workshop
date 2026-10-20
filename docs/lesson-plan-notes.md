@@ -29,7 +29,7 @@ Participants run the one command above and get a fresh install, plus only what t
 |---|---|
 | **Address** | <https://localhost:8443/registry/>, upstream's default path. (Your current instance uses `/registry-pe/` on another host, so screenshots taken there show a different address.) Browsers warn once about the self-signed certificate. |
 | **Login** | A Basic-auth prompt: any username, empty password. `admin` is the platform administrator; its display name is "Registry Admin". Any other username is whoever has that login identifier, or a new person with no COs, who can accept an invitation or sign up. Use a private window per person. |
-| **Data** | Only the COmanage CO and the platform administrator. No other COs, no people, no message templates. |
+| **Data** | Only the COmanage CO and the platform administrator. Participants create the COs and most of the configuration themselves in the UI during the lesson: no other COs, no people, no pipelines, no message templates. |
 | **Plugins** | Installed but **Suspended**. The lesson activates what it needs, as `admin` in the COmanage CO: **Configuration → Platform-Wide Configuration → Plugins**, gear menu on the row → **Activate** (FileConnector for the FileSource and the File Provisioner, SqlConnector for the SQL Provisioner). If you'd rather they start active, that is a one-line change in the kit. |
 | **Mail** | Already goes to Mailpit: an Outgoing SMTP Server "Mailpit (workshop mail catcher)" on the COmanage CO, which every CO uses. Participants read all mail at <http://localhost:8025/>. |
 | **FileSource input** | `hr.csv` and `registrar.csv`, at `/srv/filesource/hr.csv` and `/srv/filesource/registrar.csv` in the Registry: 45 fictional people each (Shayna Atkinson's v4 training population, converted to CSV v3, with a `uid` column added). |
@@ -146,8 +146,9 @@ From test runs of the procedures on the kit:
    PipelineToolkit if the pipeline adds login identifiers), or already active?
 2. **Who sends the invitations**: a CO administrator persona is needed (above). Ruth Spence in CO:admins is the
    simplest; any Person with a login identifier works.
-3. **Anything else that should exist before the first chapter** (a CO, a pipeline...)? The kit's setup step can
-   create it, so participants start exactly where the lesson begins.
+3. **Mail setup**: the kit configures the Outgoing SMTP Server (Mailpit) for participants, so invitation and welcome
+   mail works however the other chapters go. If you'd like participants to configure it themselves (Configuration →
+   Servers → Add, then CO Settings; steps in the instructor guide), we'll remove it from the kit's setup step.
 4. **The CSV files**: keep these, or send yours.
 5. **Prerequisites**: the participant guide asks for Docker Desktop (or Docker Engine on Linux) and Git, 8 GB of
    memory and 5 GB of disk. Docker Desktop needs a paid subscription for professional use at larger organisations
