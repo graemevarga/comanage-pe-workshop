@@ -8,7 +8,7 @@ with sync_playwright() as pw:
     ruth = find_id(r, "people?co_id=3", "Ruth Spence", "people")
     r.go(f"person-roles?person_id={ruth}")
     href = [a.get_attribute("href") for a in r.page.locator("main table a").all() if "person-roles/edit" in (a.get_attribute("href") or "")][0]
-    r.go(href.replace("/registry-pe/", "", 1))
+    r.go(href)
     r.set("status", "XP")
     r.save("expire Faculty/Staff role")
     r.go(f"people/edit/{ruth}")

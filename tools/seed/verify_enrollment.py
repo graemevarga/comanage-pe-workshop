@@ -8,7 +8,7 @@ import urllib.request
 
 from registry import BASE, Registry, RegistryError, sync_playwright
 
-MAILPIT = "http://registry:8025/api/v1"
+MAILPIT = "http://mailpit:8025/api/v1"
 USER = sys.argv[1] if len(sys.argv) > 1 else "pat.newcomer"
 EMAIL = f"{USER}@discovery-tng.example"
 

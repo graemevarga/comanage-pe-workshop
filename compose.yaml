@@ -1,30 +1,83 @@
-# COmanage Registry PE 5.2.0 workshop: one container with everything inside
-# (Registry, PostgreSQL, Mailpit, job runner, workshop data and checkpoints).
+# COmanage Registry PE 5.2.0 workshop
 #
-#   docker compose up -d     then open https://localhost:8443/registry-pe/ and log in as "admin" (blank password)
-#   docker compose down      throws the container away; the next "up" starts fresh
+# The same pieces you would deploy yourself, each in its own container:
+#   registry           COmanage Registry 5.2.0, the image built by the upstream release's own container/build.sh
+#                      ("container/build.sh -s 1 --label 5.2.0 registry basic-auth"), configured only through
+#                      upstream's documented environment variables and its slashRoot mechanism
+#   registry-database  PostgreSQL (official image)
+#   mailpit            catches all outgoing mail (stands in for your campus SMTP relay)
+#
+#   docker compose up -d      then open https://localhost:8443/registry/ and log in as "admin" (empty password)
+#   ./workshop help           checkpoints, syncs and other helpers
 #
 # Ports are published on 127.0.0.1 only: with anonymous login, anyone who can reach them is an administrator.
-# Change ports or other settings in a .env file (see .env.example).
+# Change ports and other settings in a .env file (see .env.example).
 name: comanage-pe-workshop
 
 services:
   registry:
-    image: ${IMAGE:-ghcr.io/graemevarga/comanage-pe-workshop:5.2.0-1}
+    image: ${REGISTRY_IMAGE:-ghcr.io/graemevarga/comanage-registry:5.2.0-basic-auth-1}
+    # Upstream's Dockerfile builds for amd64 only; Apple Silicon Macs run it under Docker Desktop's emulation.
+    platform: linux/amd64
+    depends_on:
+      registry-database:
+        condition: service_healthy
+    environment:
+      # First administrator, created by "bin/cake setup" on the first start
+      COMANAGE_REGISTRY_ADMIN_GIVEN_NAME: Registry
+      COMANAGE_REGISTRY_ADMIN_FAMILY_NAME: Admin
+      COMANAGE_REGISTRY_ADMIN_USERNAME: admin
+      # Database (these are upstream's defaults, spelled out)
+      COMANAGE_REGISTRY_DATABASE_HOST: registry-database
+      COMANAGE_REGISTRY_DATABASE: registry
+      COMANAGE_REGISTRY_DATABASE_USER: registry_user
+      COMANAGE_REGISTRY_DATABASE_USER_PASSWORD: ${DATABASE_PASSWORD:-password}
+      # Demo value; for a real deployment generate your own and keep it secret
+      COMANAGE_REGISTRY_SECURITY_SALT: 930c5c71809f7fae25763c352dfbadc7f18142a0
+      # Web server
+      COMANAGE_REGISTRY_VIRTUAL_HOST_FQDN: localhost
+      COMANAGE_REGISTRY_VIRTUAL_HOST_PORT: ${HTTPS_PORT:-8443}
+      HTTPS_CERT_FILE: /run/workshop/tls/cert.pem
+      HTTPS_PRIVKEY_FILE: /run/workshop/tls/privkey.pem
+    volumes:
+      # Files copied over the image at every start (anonymous-login vhost, mod_authn_anon)
+      - ./registry/slashRoot:/opt/registry/slashRoot:ro
+      # Self-signed certificate for localhost (demo only)
+      - ./registry/tls:/run/workshop/tls:ro
+      # Input files for the FileSource External Identity Source
+      - ./filesource:/srv/filesource:ro
     ports:
       - "127.0.0.1:${HTTPS_PORT:-8443}:443"
       - "127.0.0.1:${HTTP_PORT:-8080}:80"
-      - "127.0.0.1:${MAILPIT_PORT:-8025}:8025"
-    environment:
-      TZ: ${TZ:-America/Chicago}
-      DEBUG: ${DEBUG:-false}
-      # Used for the ready banner and for redirecting http:// to the published https:// port.
-      WORKSHOP_HTTPS_PORT: ${HTTPS_PORT:-8443}
-      WORKSHOP_MAILPIT_PORT: ${MAILPIT_PORT:-8025}
-    stop_grace_period: 30s
-    # Optional: keep the Registry database across "docker compose down" (see docs/participant-guide.md).
-    # volumes:
-    #   - registry-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsk", "-o", "/dev/null", "https://localhost/registry/"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 300s
 
-# volumes:
-#   registry-db: {}
+  registry-database:
+    image: ${DATABASE_IMAGE:-postgres:17}
+    environment:
+      POSTGRES_DB: registry
+      POSTGRES_USER: registry_user
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-password}
+    volumes:
+      - registry-database:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U registry_user -d registry"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  mailpit:
+    image: ${MAILPIT_IMAGE:-axllent/mailpit:v1.31.6}
+    environment:
+      # The Registry's SMTP client always authenticates; accept any (or no) credentials, without TLS
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+    ports:
+      - "127.0.0.1:${MAILPIT_PORT:-8025}:8025"
+
+volumes:
+  registry-database: {}

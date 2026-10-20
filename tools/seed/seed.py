@@ -31,10 +31,9 @@ def co_id(r, name):
 
 def co_settings(r, co):
     """Open the CO's settings form (the CO Settings link on the Configuration menu page)."""
-    r.go(f"co-settings?co_id={co}") if False else None
     r.go(f"dashboards/configuration?co_id={co}")
     href = r.page.locator("a", has_text="CO Settings").first.get_attribute("href")
-    r.go(href.replace("/registry-pe/", "", 1) if href.startswith("/registry-pe/") else href)
+    r.go(href)
 
 
 def activate_plugin(r, plugin):
@@ -50,12 +49,12 @@ def activate_plugin(r, plugin):
     print(f"  activated {plugin}: {r.flashes()}")
 
 
-# ---- 01-fresh: platform admin + Mailpit as the COmanage CO's Outgoing SMTP Server ---------------------------
+# ---- 01-email: Mailpit as the COmanage CO's Outgoing SMTP Server; the admin gets a verified address -----------
 def stage_01(r):
     r.go("servers/add?co_id=1")
     r.fill({"description": SMTP_SERVER, "status": "A", "plugin": "CoreServer.SmtpServers"})
     r.save("add SMTP server")
-    r.fill({"hostname": "127.0.0.1", "port": "1025", "username": "", "password": "", "use_tls": False,
+    r.fill({"hostname": "mailpit", "port": "1025", "username": "", "password": "", "use_tls": False,
             "default_from": "registry@workshop.test", "default_reply_to": "noreply@workshop.test",
             "override_to": ""})
     r.save("configure SMTP server")
@@ -115,7 +114,7 @@ def stage_03(r):
 
 
 # ---- 04-filesource-synced (UI part): FileSource for hr.csv; seed-all.sh then runs "workshop sync 3 <eis>" ----------
-HR_FILE = "/srv/comanage-registry/local/filesource/hr.csv"
+HR_FILE = "/srv/filesource/hr.csv"
 
 
 def stage_04(r):
@@ -132,7 +131,7 @@ def stage_04(r):
             "plugin": "PipelineToolkit.IdentifierMappers"})
     r.save("add IdentifierMappers flange")
     mapper_href = r.page.locator("a", has_text="Login Identifier Types").first.get_attribute("href")
-    r.go(mapper_href.replace("/registry-pe/", "", 1).replace("login-identifier-types?", "login-identifier-types/add?"))
+    r.go(mapper_href.replace("login-identifier-types?", "login-identifier-types/add?"))
     r.fill({"type_id": {"label": "UID"}, "login": True})
     r.save("login identifier type UID")
     # External Identity Source -> FileSource configuration

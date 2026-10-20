@@ -1,0 +1,172 @@
+#!/usr/bin/env bash
+#
+# workshop - helpers for the COmanage Registry PE workshop. Run from this directory: ./workshop help
+#
+# Every command is a thin wrapper around "docker compose" and the standard containers (registry, registry-database,
+# mailpit). It prints the underlying command, which is the same one you would use with your own deployment.
+# Works with the bash that ships with macOS (3.2), Linux, WSL and Git Bash on Windows.
+set -euo pipefail
+cd "$(dirname "$0")"
+
+DB_USER=registry_user
+DB_NAME=registry
+APP_DIR=/srv/comanage-registry/app
+CKPT_DIR=checkpoints
+HTTPS_PORT=$(sed -n 's/^HTTPS_PORT=//p' .env 2> /dev/null | tail -n 1 || true)
+HTTPS_PORT=${HTTPS_PORT:-8443}
+MAILPIT_PORT=$(sed -n 's/^MAILPIT_PORT=//p' .env 2> /dev/null | tail -n 1 || true)
+MAILPIT_PORT=${MAILPIT_PORT:-8025}
+
+die() { echo "workshop: $*" >&2; exit 1; }
+show() { echo "\$ $*" >&2; }
+
+usage() {
+    cat << USAGE
+Usage: ./workshop <command> [arguments]
+
+  status                     Containers, URLs and health
+  list                       Checkpoints you can restore
+  restore <name>             Replace the Registry database with a checkpoint, e.g. 04-filesource-synced
+  reset                      Start over: delete the database volume and run the Registry's first start again
+  sync <co_id> <eis_id> [force] [-v]
+                             Full sync of External Identity Source <eis_id> in CO <co_id> (FileSource)
+  cake <arguments...>        Run bin/cake in the registry container (as www-data)
+  mail-test <person_id>      Email a Person's verified address (look for it in Mailpit)
+  psql                       Open psql on the Registry database
+  logs                       Follow the Registry's log
+  checkpoint <name> [text]   Save the current database as a checkpoint (instructors)
+  help                       This help
+USAGE
+}
+
+wait_healthy() {
+    local i status
+    for i in $(seq 1 150); do
+        status=$(docker inspect -f '{{.State.Health.Status}}' "$(docker compose ps -q registry)" 2> /dev/null || true)
+        if [ "${status}" = "healthy" ]; then return 0; fi
+        sleep 2
+    done
+    die "the Registry did not become healthy within 5 minutes; see: docker compose logs registry"
+}
+
+checkpoint_file() {
+    local name="${1%.dump}"
+    case "${name}" in
+        ""|*[!A-Za-z0-9._-]*) die "invalid checkpoint name: ${1}" ;;
+    esac
+    echo "${CKPT_DIR}/${name}.dump"
+}
+
+cmd_status() {
+    docker compose ps
+    echo
+    echo "Registry: https://localhost:${HTTPS_PORT}/registry/   (log in as admin, empty password)"
+    echo "Mailpit:  http://localhost:${MAILPIT_PORT}/"
+}
+
+cmd_list() {
+    local f name desc
+    for f in "${CKPT_DIR}"/*.dump; do
+        [ -e "${f}" ] || { echo "No checkpoints in ${CKPT_DIR}/."; return 0; }
+        name=$(basename "${f}" .dump)
+        desc=""
+        if [ -f "${CKPT_DIR}/${name}.txt" ]; then desc=$(head -n 1 "${CKPT_DIR}/${name}.txt"); fi
+        printf '  %-24s %s\n' "${name}" "${desc}"
+    done
+}
+
+cmd_restore() {
+    [ $# -eq 1 ] || die "usage: ./workshop restore <name>   (see: ./workshop list)"
+    local file
+    file=$(checkpoint_file "$1")
+    [ -f "${file}" ] || die "no checkpoint ${file} (see: ./workshop list)"
+    echo "Restoring $(basename "${file}" .dump) into the registry-database container..."
+    show docker compose exec -T registry-database dropdb -U ${DB_USER} --force ${DB_NAME}
+    docker compose exec -T registry-database dropdb -U "${DB_USER}" --force --if-exists "${DB_NAME}"
+    show docker compose exec -T registry-database createdb -U ${DB_USER} ${DB_NAME}
+    docker compose exec -T registry-database createdb -U "${DB_USER}" -O "${DB_USER}" "${DB_NAME}"
+    show "docker compose exec -T registry-database pg_restore -U ${DB_USER} --no-owner -d ${DB_NAME} < ${file}"
+    docker compose exec -T registry-database pg_restore -U "${DB_USER}" --no-owner --no-privileges \
+        --exit-on-error -d "${DB_NAME}" < "${file}"
+    echo "Restarting the Registry so it drops its caches..."
+    show docker compose restart registry
+    docker compose restart registry > /dev/null
+    wait_healthy
+    echo "Done. Reload the Registry in your browser (log in again if asked)."
+}
+
+cmd_checkpoint() {
+    [ $# -ge 1 ] || die "usage: ./workshop checkpoint <name> [description]"
+    local file name
+    file=$(checkpoint_file "$1")
+    shift
+    name=$(basename "${file}" .dump)
+    show "docker compose exec -T registry-database pg_dump -U ${DB_USER} -Fc ${DB_NAME} > ${file}"
+    docker compose exec -T registry-database pg_dump -U "${DB_USER}" -Fc "${DB_NAME}" > "${file}.tmp"
+    mv -f "${file}.tmp" "${file}"
+    if [ $# -gt 0 ]; then printf '%s\n' "$*" > "${CKPT_DIR}/${name}.txt"; fi
+    echo "Saved ${file} ($(du -h "${file}" | cut -f1))"
+}
+
+cmd_reset() {
+    echo "Deleting the database volume and starting fresh (the Registry's first start runs again)..."
+    show docker compose down -v
+    docker compose down -v
+    show docker compose up -d
+    docker compose up -d
+    wait_healthy
+    echo "Done: a fresh install with only the platform administrator (admin)."
+}
+
+cmd_sync() {
+    local co="${1:-}" eis="${2:-}" force="" verbose="" arg last_job
+    shift 2 2> /dev/null || true
+    for arg in "$@"; do
+        case "${arg}" in
+            force) force="force=1" ;;
+            -v|--verbose) verbose=1 ;;
+            *) die "usage: ./workshop sync <co_id> <external_identity_source_id> [force] [-v]" ;;
+        esac
+    done
+    case "${co}${eis}" in
+        ""|*[!0-9]*) die "usage: ./workshop sync <co_id> <external_identity_source_id> [force] [-v]" ;;
+    esac
+    show docker compose exec -u www-data -w ${APP_DIR} registry ./bin/cake job -c "${co}" -j CoreJob.SyncJob -s \
+        external_identity_source_id="${eis}" ${force}
+    if [ -n "${verbose}" ]; then
+        docker compose exec -u www-data -w "${APP_DIR}" registry ./bin/cake job -c "${co}" -j CoreJob.SyncJob -s \
+            "external_identity_source_id=${eis}" ${force}
+        return
+    fi
+    last_job=$(docker compose exec -T registry-database psql -U "${DB_USER}" -d "${DB_NAME}" -Atqc \
+        "select coalesce(max(id), 0) from jobs")
+    # Quietly (the Registry's container logging is very verbose), then print the job's own summary.
+    docker compose exec -T -u www-data -w "${APP_DIR}" registry env -u COMANAGE_REGISTRY_CONTAINER \
+        ./bin/cake job -q -c "${co}" -j CoreJob.SyncJob -s "external_identity_source_id=${eis}" ${force} || true
+    docker compose exec -T registry-database psql -U "${DB_USER}" -d "${DB_NAME}" -Atqc \
+        "select 'Job ' || id || ': ' || status || ' - ' || coalesce(finish_summary, start_summary, register_summary, '')
+         from jobs where job_id is null and id > ${last_job} order by id"
+    echo "Details: Operations > Jobs in the CO, or run again with -v."
+}
+
+command="${1:-help}"
+shift || true
+case "${command}" in
+    status)     cmd_status ;;
+    list)       cmd_list ;;
+    restore)    cmd_restore "$@" ;;
+    reset)      cmd_reset ;;
+    checkpoint) cmd_checkpoint "$@" ;;
+    sync)       cmd_sync "$@" ;;
+    cake)       show docker compose exec -u www-data -w ${APP_DIR} registry ./bin/cake "$@"
+                exec docker compose exec -u www-data -w "${APP_DIR}" registry ./bin/cake "$@" ;;
+    mail-test)  case "${1:-x}" in *[!0-9]*) die "usage: ./workshop mail-test <person_id>" ;; esac
+                show docker compose exec -u www-data -w ${APP_DIR} registry ./bin/cake test -t mail --recipient "$1"
+                docker compose exec -T -u www-data -w "${APP_DIR}" registry env -u COMANAGE_REGISTRY_CONTAINER \
+                    ./bin/cake test -t mail --recipient "$1" ;;
+    psql)       show docker compose exec registry-database psql -U ${DB_USER} ${DB_NAME}
+                exec docker compose exec registry-database psql -U "${DB_USER}" "${DB_NAME}" ;;
+    logs)       exec docker compose logs -f registry ;;
+    help|-h|--help) usage ;;
+    *)          usage >&2; exit 2 ;;
+esac

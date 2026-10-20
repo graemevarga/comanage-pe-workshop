@@ -8,7 +8,7 @@ import re
 
 from playwright.sync_api import sync_playwright  # noqa: F401  (re-exported for scripts)
 
-BASE = os.environ.get("BASE", "https://registry/registry-pe")
+BASE = os.environ.get("BASE", "https://registry/registry")
 OUT = os.environ.get("OUT", "out")
 
 
@@ -38,6 +38,10 @@ class Registry:
         return self.page.url
 
     def go(self, path, what=None):
+        """Open a page: an app-relative path ("cos?co_id=1") or an href taken from the page ("/registry/cos/...")."""
+        webroot = "/" + BASE.split("/", 3)[3].strip("/") + "/" if BASE.count("/") >= 3 else "/"
+        if path.startswith(webroot):
+            path = path[len(webroot):]
         self.page.goto(f"{BASE}/{path.lstrip('/')}")
         self.page.wait_for_load_state("networkidle")
         self.assert_ok(what or path)

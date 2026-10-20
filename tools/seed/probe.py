@@ -6,7 +6,7 @@ import re
 import sys
 from playwright.sync_api import sync_playwright
 
-BASE = os.environ.get("BASE", "https://registry/registry-pe")
+BASE = os.environ.get("BASE", "https://registry/registry")
 OUT = os.environ.get("OUT", "out")
 USER = os.environ.get("REG_USER", "admin")
 

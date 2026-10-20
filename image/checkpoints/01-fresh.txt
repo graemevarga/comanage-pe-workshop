@@ -1,1 +1,0 @@
-Bare install: platform admin 'admin' (verified email admin@workshop.test), Mailpit as the Outgoing SMTP Server, no plugins or COs yet
