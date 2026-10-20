@@ -22,7 +22,9 @@ The first start downloads about 500 MB, which is slow on conference Wi-Fi, so pl
   - macOS and Windows: [Docker Desktop](https://docs.docker.com/desktop/). On Windows, keep the installer's default
     (WSL 2); it may ask you to restart.
   - Linux: [Docker Engine](https://docs.docker.com/engine/install/) with the Compose plugin; `docker compose version`
-    should work.
+    should work. To run `docker` without `sudo`, add yourself to the `docker` group
+    (`sudo usermod -aG docker $USER`, then log out and back in); that group is equivalent to root on your machine, so
+    if you'd rather not, put `sudo` in front of the docker commands (and of `./workshop`).
   - Docker Desktop is free for personal use, education and small businesses, but professional use at larger
     organisations and government needs a paid subscription; check with your IT department.
   - **Apple Silicon Macs:** the Registry image is built for Intel/AMD, as the release builds it, and Docker Desktop

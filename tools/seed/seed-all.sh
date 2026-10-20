@@ -17,9 +17,16 @@ stage_wanted() { [[ "$1" > "${first}" || "$1" == "${first}" ]]; }
 if [[ "${first}" == "01" ]]; then
     ./workshop reset
 else
-    docker compose up --wait
     prev=$(printf '%02d' $((10#${first} - 1)))
-    ./workshop restore "$(basename "$(ls checkpoints/${prev}-*.dump)" .dump)"
+    if [[ "${first}" == "07" ]]; then prev=04; fi   # stage 07 builds on the FileSource state
+    prev_dump=$(ls checkpoints/${prev}-*.dump 2> /dev/null | head -n 1 || true)
+    if [[ -z "${prev_dump}" ]]; then
+        echo "seed-all.sh: stage ${first} starts from checkpoint ${prev}, which isn't saved yet." \
+             "Run tools/seed/seed-all.sh (from 01) first." >&2
+        exit 1
+    fi
+    docker compose up --wait
+    ./workshop restore "$(basename "${prev_dump}" .dump)"
 fi
 rm -f tools/seed/out/s*.png
 

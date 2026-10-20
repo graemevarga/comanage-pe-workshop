@@ -117,6 +117,8 @@ Verified on the kit; click path in the [instructor guide](instructor-guide.md#en
   identifier. Afterwards they log in as that name.
 - Declining shows the same "Enrollment Complete ... has been finalized" page as accepting (with a "Invitation
   Declined" message), and nobody is notified.
+- Each invitation link works once: opening it again after accepting or declining shows an error page (a 5.2.0 bug).
+  Tell participants so.
 
 ## Where participants get stuck
 
@@ -140,6 +142,8 @@ From test runs of the procedures on the kit:
 - Why people from a file can't log in unless the pipeline adds a login identifier.
 - What the invitation does: CO admin → email (Mailpit) → invitee accepts and picks a login → new Person.
 - Mailpit as the "fake inbox" where every verification, invitation and welcome mail arrives.
+- What participants see first: the browser's certificate warning, then the browser's own sign-in box after Login
+  (username `admin`, password empty). A screenshot of each saves questions.
 
 ## Things to decide
 
