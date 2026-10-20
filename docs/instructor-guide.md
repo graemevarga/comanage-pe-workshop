@@ -41,8 +41,9 @@ Lamar Martin 47, Claude Larkin 48.
    **Configuration → Servers** shows "Mailpit (workshop mail catcher)" (plugin `CoreServer.SmtpServers`, host
    `127.0.0.1`, port `1025`, no TLS, From `registry@workshop.test`), and **Configuration → CO Settings** →
    *Outgoing SMTP Server* points at it. Set on the COmanage CO, it applies to every CO.
-3. Optional mail test: give `admin` an email address (my canvas → Add Attribute → Email Address, type Official), open
-   it and click **Force Verify**, then `workshop mail-test 1`; the message appears in Mailpit.
+3. Mail test: `workshop mail-test 1` emails the admin's pre-verified address `admin@workshop.test`; the message
+   appears in Mailpit. (To show how it was set up: my canvas → Email Addresses → admin@workshop.test, where **Force
+   Verify** skips the verification email. Don't press it again on a verified address: 5.2.0 answers with HTTP 500.)
 
 ## Chapter 2: Configuration (result: `02-configuration`)
 
@@ -111,7 +112,10 @@ Not part of the checkpoints yet (see question 1 in [laura-alignment.md](laura-al
    complete").
 6. Log in as `ruth.spence` in a private window: she lands on Redcurrant University's dashboard as herself.
 
-Exercise: add a second source for `registrar.csv` (same pipeline). Its 45 people are different from `hr.csv`'s.
+Exercise: add a second source for `registrar.csv` (same pipeline, System of Record Label `registrar`), then
+`workshop sync 3 2`: 45 more people, with eppn identifiers, who log in with their uid (e.g. `lamar.martin`). Do it
+before chapter 5, or from `04-filesource-synced`: chapter 5 creates Lamar Martin by hand without a uid, so a later
+registrar sync makes a second Lamar Martin. Source ids are in the source's URL (`external-identity-sources/edit/N`).
 
 ## Chapter 5: Organisational structure (result: `05-org-structure`)
 
@@ -208,6 +212,7 @@ make build                       # bake the new dumps into the image
 | Logged in but not authorized → endless redirect (ERR_TOO_MANY_REDIRECTS) with `DEBUG=false` | Go to `/registry-pe/` or log out; set `DEBUG=true` on the demo machine for a flash message instead |
 | Full FileSource sync is command-line only | `workshop sync 3 1` |
 | Syncing a source whose Status is Disabled → TypeError | Use Full (or Manual/Update) |
+| A pipeline whose "Person Status On Create" is left blank fails every record it syncs | Always choose a status (Active) |
 | Rows removed from the CSV are never processed (the sync logs an error per missing key) | Demonstrate leavers by role status, not by deleting rows |
 | `bin/cake job -r -c all` fails | The kit's job runner loops over CO ids for you |
 | Mail sent by command-line jobs has links without a host | Trigger mail from the UI |

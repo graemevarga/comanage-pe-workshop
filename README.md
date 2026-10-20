@@ -47,7 +47,7 @@ docker compose exec registry workshop restore 04-filesource-synced
 
 | Checkpoint | State |
 |---|---|
-| `01-fresh` | Platform admin `admin`; Mailpit configured as the outgoing mail server. **This is the state a new container starts in.** |
+| `01-fresh` | Platform admin `admin` (verified email `admin@workshop.test`); Mailpit configured as the outgoing mail server. **This is the state a new container starts in.** |
 | `02-configuration` | FileConnector and PipelineToolkit active; COs Discovery TNG (2), Redcurrant University (3), Guests (4), MESS (5); affiliation type Principal Investigator |
 | `03-connections` | Redcurrant University: pipeline "Process HR API Inputs" (matches on UID); API user `co_3.hr_api_user` |
 | `04-filesource-synced` | Redcurrant University: FileSource "HR File" (`hr.csv`) synced, 45 people who can log in with their uid |

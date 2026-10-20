@@ -40,13 +40,15 @@ ARG MAILPIT_SHA256_ARM64=de07955b783236d9129da76da9a5970f1777834a18b2c07611de957
 ARG COMANAGE_REGISTRY_WEBROOT=registry-pe
 
 # PHP extensions 5.2.0 needs on top of the official image for PostgreSQL: intl, pdo_pgsql, pcntl
-# (pcntl is unused at 5.2.0 but harmless), plus opcache. The -dev packages are purged afterwards,
-# keeping only the runtime libraries the new extensions link against (docker-library pattern).
+# (pcntl is unused at 5.2.0 but harmless), plus opcache. pdo_mysql (mysqlnd, no extra libraries) is
+# needed for DEBUG=true: DebugKit opens every configured datasource, including upstream's MySQL "test"
+# one. The -dev packages are purged afterwards, keeping only the runtime libraries the new extensions
+# link against (docker-library pattern).
 RUN set -eux; \
     savedAptMark="$(apt-mark showmanual)"; \
     apt-get update; \
     apt-get install -y --no-install-recommends libicu-dev libpq-dev; \
-    docker-php-ext-install -j"$(nproc)" intl pdo_pgsql pcntl; \
+    docker-php-ext-install -j"$(nproc)" intl pdo_pgsql pdo_mysql pcntl; \
     docker-php-ext-enable opcache; \
     apt-mark auto '.*' > /dev/null; \
     [ -z "$savedAptMark" ] || apt-mark manual $savedAptMark > /dev/null; \
@@ -56,7 +58,7 @@ RUN set -eux; \
     apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false; \
     rm -rf /var/lib/apt/lists/*; \
     cp "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"; \
-    php -r 'foreach (["intl", "pdo_pgsql", "pcntl", "mbstring", "dom", "posix", "Zend OPcache"] as $e) { if (!extension_loaded($e)) { fwrite(STDERR, "missing PHP extension $e\n"); exit(1); } }'
+    php -r 'foreach (["intl", "pdo_pgsql", "pdo_mysql", "pdo_sqlite", "pcntl", "mbstring", "dom", "posix", "Zend OPcache"] as $e) { if (!extension_loaded($e)) { fwrite(STDERR, "missing PHP extension $e\n"); exit(1); } }'
 
 # PostgreSQL 15 and supervisord from Debian bookworm. create_main_cluster=false stops Debian from
 # creating its own "15/main" cluster; workshop-init-db creates the workshop cluster below.

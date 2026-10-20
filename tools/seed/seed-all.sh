@@ -33,7 +33,7 @@ rm -f tools/seed/out/s*.png
 
 if stage_wanted 01; then
     ui 01
-    ws checkpoint 01-fresh "Bare install: platform admin 'admin', Mailpit as the Outgoing SMTP Server, no plugins or COs yet"
+    ws checkpoint 01-fresh "Bare install: platform admin 'admin' (verified email admin@workshop.test), Mailpit as the Outgoing SMTP Server, no plugins or COs yet"
 fi
 if stage_wanted 02; then
     ui 02

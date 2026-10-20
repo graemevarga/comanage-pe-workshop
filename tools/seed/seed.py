@@ -64,6 +64,14 @@ def stage_01(r):
     r.set("email_smtp_server_id", {"label": SMTP_SERVER})
     r.save("CO settings: outgoing SMTP server")
     r.shot("co-settings")
+    # A verified address for the platform admin (Person 1), so "workshop mail-test 1" works straight away
+    r.go("email-addresses/add?person_id=1")
+    r.fill({"mail": "admin@workshop.test", "type_id": {"label": "Official"}})
+    r.save("admin email address")
+    email_id = r.id_from_url()
+    r.go(f"email-addresses/force-verify/{email_id}")
+    if not any("force verified" in f for f in r.flashes()):
+        raise RegistryError(f"force verify failed: {r.flashes()}")
 
 
 # ---- 02-configuration: plugins, the four demo COs, a custom affiliation type ------------------------------------

@@ -8,7 +8,7 @@ Everything marked *verified* was checked against a running container built from 
 
 | Her screenshots | The kit |
 |---|---|
-| Registry **5.2.0**, stock theme, footer "COmanage Registry v5.2.0" | Built from the upstream 5.2.0 tag, unmodified |
+| Registry **5.2.0**, stock theme ("COmanage Registry v5.2.0" in the Configuration panel) | Built from the upstream 5.2.0 tag, unmodified |
 | App served at **`/registry-pe/`** | `https://localhost:8443/registry-pe/` (build argument `COMANAGE_REGISTRY_WEBROOT`) |
 | Platform admin logs in as **`admin`** | Username `admin`, blank password |
 | Five COs: COmanage, **Discovery TNG**, **Redcurrant University**, **Guests**, **MESS**, with her descriptions | Checkpoint `02-configuration`; the "Available Collaborations" page matches hers row for row |
