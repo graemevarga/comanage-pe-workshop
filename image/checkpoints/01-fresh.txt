@@ -1,0 +1,1 @@
+Bare install: platform admin 'admin', Mailpit as the Outgoing SMTP Server, no plugins or COs yet

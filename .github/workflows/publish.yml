@@ -1,0 +1,165 @@
+# Build the workshop image natively for amd64 and arm64, push both by digest to GHCR, merge them into
+# one multi-architecture tag, then pull the published image on both architectures and smoke-test it.
+#
+# Release: push a tag such as v5.2.0-1  ->  ghcr.io/graemevarga/comanage-pe-workshop:5.2.0-1, :5.2.0, :latest
+# Test build: run the workflow by hand with an extra tag (for example 5.2.0-1-rc1); it does not move :latest.
+name: publish
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Image tag to publish (for example 5.2.0-1-rc1)
+        required: true
+        type: string
+
+env:
+  REGISTRY_IMAGE: ghcr.io/graemevarga/comanage-pe-workshop
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-24.04
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Prepare
+        run: |
+          platform='${{ matrix.platform }}'
+          echo "PLATFORM_PAIR=${platform//\//-}" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@v7
+
+      - name: Image labels
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY_IMAGE }}
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: image
+          platforms: ${{ matrix.platform }}
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+
+      - name: Export digest
+        run: |
+          mkdir -p "${{ runner.temp }}/digests"
+          digest='${{ steps.build.outputs.digest }}'
+          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: digests-${{ env.PLATFORM_PAIR }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    needs: build
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Image tags
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY_IMAGE }}
+          flavor: latest=false
+          tags: |
+            type=match,pattern=v(.*),group=1
+            type=match,pattern=v(\d+\.\d+\.\d+),group=1
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=raw,value=${{ inputs.tag }},enable=${{ github.event_name == 'workflow_dispatch' }}
+
+      - name: Create the multi-architecture tags
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          # word splitting is intended: one "-t TAG" pair per tag, one digest reference per platform
+          # shellcheck disable=SC2046
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ env.REGISTRY_IMAGE }}@sha256:%s ' *)
+
+      - name: Inspect
+        run: docker buildx imagetools inspect '${{ env.REGISTRY_IMAGE }}:${{ steps.meta.outputs.version }}'
+
+  verify:
+    needs: merge
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Start the published image
+        run: |
+          docker run -d --name cpw -p 127.0.0.1:8443:443 -p 127.0.0.1:8025:8025 \
+            '${{ env.REGISTRY_IMAGE }}:${{ needs.merge.outputs.version }}'
+          for _ in $(seq 1 60); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' cpw)" = healthy ] && break
+            sleep 3
+          done
+          docker inspect -f '{{.State.Health.Status}}' cpw | grep -qx healthy || { docker logs cpw | tail -200; exit 1; }
+          uname -m
+
+      - name: Anonymous login, Mailpit, checkpoints
+        run: |
+          set -x
+          base=https://localhost:8443/registry-pe
+          test "$(curl -ks -o /dev/null -w '%{http_code}' "$base/")" = 200
+          test "$(curl -ks -o /dev/null -w '%{http_code}' "$base/auth/login/login.php")" = 401
+          test "$(curl -ks -u admin: -o /dev/null -w '%{http_code}' "$base/auth/login/login.php")" = 302
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8025/)" = 200
+          docker exec cpw workshop list
+          docker exec cpw workshop restore 04-filesource-synced
+          test "$(docker exec cpw workshop psql -Atc "select count(*) from external_identities where external_identity_id is null and deleted is not true")" -ge 45
+          docker exec cpw workshop reset
+
+      - name: Logs on failure
+        if: failure()
+        run: |
+          docker logs cpw 2>&1 | grep -v ' debug: ' | tail -200

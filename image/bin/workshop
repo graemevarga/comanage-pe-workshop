@@ -20,8 +20,10 @@ Usage: workshop <command> [arguments]
   restore <name>             Replace the Registry database with checkpoint <name>, e.g. 04-filesource-synced
   reset                      Same as "restore 01-fresh": back to the state the container started in
   checkpoint <name> [text]   Save the current database as checkpoint <name> (instructors)
-  sync <co_id> <eis_id> [force]
-                             Full sync of External Identity Source <eis_id> in CO <co_id> (FileSource)
+  rebuild-bare               Empty database + upstream setup, i.e. before 01-fresh (instructors)
+  sync <co_id> <eis_id> [force] [-v]
+                             Full sync of External Identity Source <eis_id> in CO <co_id> (FileSource);
+                             force = re-process unchanged records, -v = show every step
   cake <arguments...>        Run bin/cake as www-data, e.g.: workshop cake plugin -a activate -p FileConnector
   psql [arguments...]        Open psql on the Registry database
   mail-test <person_id>      Email a Person's verified address (look for it in Mailpit)
@@ -40,6 +42,8 @@ as_www() {
     (cd "${APP_DIR}" && env -u COMANAGE_REGISTRY_CONTAINER HOME=/var/www \
         setpriv --reuid=www-data --regid=www-data --init-groups "$@")
 }
+
+db_value() { psql -h /run/postgresql -U "${DB_USER}" -d "${DB}" -Atq -c "$1"; }
 
 registry_up() { curl -fsk -o /dev/null -A workshop-healthcheck "${URL}"; }
 
@@ -116,8 +120,9 @@ cmd_restore() {
     createdb -h /run/postgresql -U postgres -O "${DB_USER}" -E UTF8 -T template0 "${DB}"
     pg_restore -h /run/postgresql -U postgres --exit-on-error --no-owner --no-privileges \
         --role="${DB_USER}" -d "${DB}" "${path}"
-    # Existing sessions describe the database we just replaced: log everyone out.
+    # Existing sessions and cached schemas describe the database we just replaced.
     find /tmp -maxdepth 1 -name 'sess_*' -delete 2> /dev/null || true
+    rm -rf "${COMANAGE_REGISTRY_DIR}/local/tmp/cache/"*/*
     echo "${name}" > "${STATE_FILE}"
     # Restarting Apache re-runs the entrypoint: schema check, setup no-op, cache clear.
     supervisorctl start apache2 jobs > /dev/null || true
@@ -125,13 +130,44 @@ cmd_restore() {
     echo "Restored ${name}. Reload the Registry in your browser and log in again if asked."
 }
 
+cmd_rebuild_bare() {
+    echo "Re-creating an empty database and running upstream's setup (admin only, no Mailpit server)..."
+    supervisorctl stop jobs apache2 > /dev/null || true
+    dropdb -h /run/postgresql -U postgres --if-exists --force "${DB}"
+    createdb -h /run/postgresql -U postgres -O "${DB_USER}" -E UTF8 -T template0 "${DB}"
+    find /tmp -maxdepth 1 -name 'sess_*' -delete 2> /dev/null || true
+    # CakePHP's cached table schemas describe the dropped database: without them, the entrypoint's
+    # "test -t database" probe treats the empty database as a first start instead of looping forever.
+    rm -rf "${COMANAGE_REGISTRY_DIR}/local/tmp/cache/"*/*
+    # "true" as the command makes workshop-entrypoint run the full first start: database schema + setup.
+    /usr/local/bin/workshop-entrypoint true > /dev/null
+    echo "bare (setup only)" > "${STATE_FILE}"
+    supervisorctl start apache2 jobs > /dev/null || true
+    wait_until_up
+    echo "Done: bare install (platform admin only). This is where tools/seed/seed-all.sh starts."
+}
+
 cmd_sync() {
-    local co="${1:-}" eis="${2:-}" force="${3:-}"
+    local co="${1:-}" eis="${2:-}" force="" verbose="" arg
+    shift 2 2> /dev/null || true
+    for arg in "$@"; do
+        case "${arg}" in
+            force) force=1 ;;
+            -v|--verbose) verbose=1 ;;
+            *) die "usage: workshop sync <co_id> <external_identity_source_id> [force] [-v]" ;;
+        esac
+    done
     [[ "${co}" =~ ^[0-9]+$ && "${eis}" =~ ^[0-9]+$ ]] \
-        || die "usage: workshop sync <co_id> <external_identity_source_id> [force]"
-    local args=(job -c "${co}" -j CoreJob.SyncJob -s "external_identity_source_id=${eis}")
-    if [[ "${force}" == "force" ]]; then args+=("force=1"); fi
-    as_www ./bin/cake "${args[@]}"
+        || die "usage: workshop sync <co_id> <external_identity_source_id> [force] [-v]"
+    local last_job args=(job -c "${co}" -j CoreJob.SyncJob -s "external_identity_source_id=${eis}")
+    if [[ -n "${force}" ]]; then args+=("force=1"); fi
+    if [[ -z "${verbose}" ]]; then args+=(-q); fi
+    last_job=$(db_value "select coalesce(max(id), 0) from jobs")
+    echo "Full sync of External Identity Source ${eis} in CO ${co}${force:+ (force)}..."
+    as_www ./bin/cake "${args[@]}" || true
+    db_value "select 'Job ' || id || ': ' || status || ' - ' || coalesce(finish_summary, start_summary, register_summary, '')
+              from jobs where job_id is null and id > ${last_job} order by id"
+    echo "Details: Operations > Jobs in the CO, \"workshop sync ... -v\", or \"workshop logs\"."
 }
 
 cmd="${1:-help}"
@@ -142,6 +178,7 @@ case "${cmd}" in
     checkpoint) cmd_checkpoint "$@" ;;
     restore)    cmd_restore "$@" ;;
     reset)      cmd_restore 01-fresh ;;
+    rebuild-bare) cmd_rebuild_bare ;;
     sync)       cmd_sync "$@" ;;
     cake)       as_www ./bin/cake "$@" ;;
     psql)       exec psql -h /run/postgresql -U "${DB_USER}" -d "${DB}" "$@" ;;

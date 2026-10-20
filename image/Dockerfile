@@ -141,7 +141,8 @@ RUN set -eux; \
       > /etc/apache2/sites-available/000-comanage.conf; \
     rm /tmp/000-comanage.conf.tmpl
 
-COPY supervisord.conf /usr/local/etc/supervisord.conf
+# At Debian's default path, so a plain "supervisorctl" (used by the workshop CLI) finds the socket credentials.
+COPY supervisord.conf /etc/supervisor/supervisord.conf
 COPY postgres/ /opt/workshop/postgres/
 COPY --chmod=0755 bin/ /usr/local/bin/
 COPY --chown=www-data:www-data data/filesource/ ${COMANAGE_REGISTRY_DIR}/local/filesource/
@@ -165,4 +166,4 @@ LABEL org.opencontainers.image.title="COmanage Registry PE 5.2.0 workshop" \
 EXPOSE 80 443 8025
 # The php:apache base image sets SIGWINCH (graceful Apache stop); supervisord needs SIGTERM.
 STOPSIGNAL SIGTERM
-ENTRYPOINT ["/usr/bin/supervisord", "-c", "/usr/local/etc/supervisord.conf"]
+ENTRYPOINT ["/usr/bin/supervisord", "-c", "/etc/supervisor/supervisord.conf"]
