@@ -96,8 +96,8 @@ customisation is anonymous login.
     time zone. Participants will see their own.
 
 12. **Docker Desktop licensing.** Docker Desktop needs a paid subscription for professional use at larger
-    organisations and government; Rancher Desktop, Colima and Podman also run the kit. Worth a line in her
-    prerequisites.
+    organisations and government. Rancher Desktop, Colima and Podman are free alternatives, though none has been
+    tested with the kit yet. Worth a line in her prerequisites.
 
 ## What changes if her answers differ
 

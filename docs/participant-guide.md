@@ -16,7 +16,7 @@ yourself: see [Running it yourself](at-home.md).
    - Linux: Docker Engine with the Compose plugin (`docker compose version` should work).
    - Docker Desktop is free for personal use, education and small businesses, but professional use at larger
      organisations and government needs a paid subscription; check with your IT department. Rancher Desktop, Colima
-     and Podman Desktop also work.
+     and Podman Desktop are free alternatives, but haven't been tested with this kit yet.
    - Give Docker at least 4 GB of memory and 5 GB of free disk.
    - **Apple Silicon:** the Registry image is built for Intel/AMD (amd64), as the release builds it. Docker Desktop runs
      it under emulation; keep *Settings → General → Use Rosetta for x86_64/amd64 emulation on Apple Silicon* turned on.
