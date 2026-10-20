@@ -314,6 +314,10 @@ Declined"; the petition is Declined and nobody is mailed.
   lowercase, the type must exist in the CO); roles as `external_identity_roles.1.affiliation`,
   `...1.title`, `...1.status` (A, S, D, GP, D2); UTF-8 **without BOM**, no `<` or `>`, unique SORIDs without leading
   zeros (Excel likes to mangle long numbers), `YYYY-MM-DD HH:MM:SS` dates. No `identifiers.login.*` (use the flange).
+- Windows line endings (CRLF) are fine (verified). A UTF-8 **byte-order mark** is not: every row then fails with
+  "Did not find SORID as first defined column, check file header definition" (verified), although the header looks
+  right. Excel's "CSV UTF-8" format writes one; save from a text editor (VS Code, Notepad on Windows 11) or Excel's
+  plain "CSV (Comma delimited)" for ASCII-only files.
 - v4-style files (like Shayna's) convert with `python3 tools/convert_v4_csv.py IN.csv OUT.csv --uid`.
 - Only fictional people. Rows deleted from the file are **not** processed in 5.2.0.
 
@@ -327,7 +331,7 @@ Laura won't be in the room, so check every procedure in the lesson plan on a fre
 3. At the start of each chapter, `./workshop checkpoint NN-chapter "what is in it"`, so you can restore it while
    presenting.
 
-`tools/seed/` automates this: `seed.py` has one function per stage that drives the same screens with Playwright (in
+`tools/seed/` automates this (on Windows, run it from WSL; it needs bash, Docker and, for `topics.py`, Python 3): `seed.py` has one function per stage that drives the same screens with Playwright (in
 a container; nothing to install), and `seed-all.sh` runs the stages from a fresh install and saves a checkpoint after
 each. `topics.py all --restore` then checks the provisioning and invitation procedures from checkpoint 04 (about 8
 minutes; it prints CONFIRMED or REFUTED for each behaviour this guide relies on). The current stages follow the

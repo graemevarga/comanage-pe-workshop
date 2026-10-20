@@ -9,6 +9,9 @@ set -euo pipefail
 cd "$(dirname "$0")"
 # Git Bash on Windows rewrites arguments that look like paths (/srv/... -> C:/Program Files/Git/srv/...).
 export MSYS_NO_PATHCONV=1
+# Interactive commands (psql, cake) only get a terminal when there is one; Git Bash's mintty, for one, has none.
+TTY_OPT=""
+[ -t 0 ] && [ -t 1 ] || TTY_OPT="-T"
 
 DB_USER=registry_user
 DB_NAME=registry
@@ -66,6 +69,21 @@ urls() {
     echo "Mail:     http://localhost:${MAILPIT_PORT}/"
 }
 
+# Docker Desktop can report the containers healthy although another program on the computer already holds the port
+# (for example Docker Desktop's own Kubernetes ingress), so check from this side that the Registry answers.
+check_reachable() {
+    local body
+    body=$(curl -sk --max-time 10 "https://localhost:${HTTPS_PORT}/registry/" 2> /dev/null || true)
+    case "${body}" in
+        *COmanage*) return 0 ;;
+    esac
+    echo >&2
+    echo "workshop: WARNING: https://localhost:${HTTPS_PORT}/registry/ doesn't answer as the Registry, so another" \
+         "program may be using port ${HTTPS_PORT}. Set another port in .env (for example HTTPS_PORT=9443)," \
+         "run ./workshop start again, and use that port. See Troubleshooting in docs/participant-guide.md." >&2
+    return 1
+}
+
 need_docker() {
     docker info > /dev/null 2>&1 || die "can't reach Docker. Start Docker Desktop (or the docker service) and try again."
 }
@@ -74,6 +92,7 @@ cmd_start() {
     need_docker
     show docker compose up --wait
     docker compose up --wait || die "something didn't start; see: docker compose ps   and   docker compose logs registry"
+    check_reachable || exit 1
     echo
     echo "Ready."
     urls
@@ -88,6 +107,7 @@ cmd_status() {
     docker compose ps
     echo
     urls
+    check_reachable || true
 }
 
 cmd_list() {
@@ -141,6 +161,7 @@ cmd_reset() {
     docker compose down -v
     show docker compose up --wait
     docker compose up --wait || die "something didn't start; see: docker compose ps   and   docker compose logs registry"
+    check_reachable || exit 1
     echo
     echo "Ready: a fresh install with only the platform administrator (admin)."
     urls
@@ -189,7 +210,7 @@ case "${command}" in
     checkpoint) cmd_checkpoint "$@" ;;
     sync)       cmd_sync "$@" ;;
     cake)       show docker compose exec -u www-data -w ${APP_DIR} registry ./bin/cake "$@"
-                exec docker compose exec -u www-data -w "${APP_DIR}" registry ./bin/cake "$@" ;;
+                exec docker compose exec ${TTY_OPT} -u www-data -w "${APP_DIR}" registry ./bin/cake "$@" ;;
     mail-test)  case "${1:-x}" in *[!0-9]*) die "usage: ./workshop mail-test <person_id>" ;; esac
                 # bin/cake test -t mail fails with a TypeError when the person has no verified address.
                 verified=$(docker compose exec -T registry-database psql -U "${DB_USER}" -d "${DB_NAME}" -Atqc \
@@ -201,7 +222,7 @@ case "${command}" in
                 docker compose exec -T -u www-data -w "${APP_DIR}" registry env -u COMANAGE_REGISTRY_CONTAINER \
                     ./bin/cake test -t mail --recipient "$1" ;;
     psql)       show docker compose exec registry-database psql -U ${DB_USER} ${DB_NAME}
-                exec docker compose exec registry-database psql -U "${DB_USER}" "${DB_NAME}" ;;
+                exec docker compose exec ${TTY_OPT} registry-database psql -U "${DB_USER}" "${DB_NAME}" ;;
     logs)       exec docker compose logs -f registry ;;
     help|-h|--help) usage ;;
     *)          usage >&2; exit 2 ;;

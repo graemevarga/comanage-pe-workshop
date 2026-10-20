@@ -54,8 +54,8 @@ services:
       # Where the File Provisioner writes, so you can open its output on your laptop
       - ./provisioned:/srv/provisioned
     ports:
+      # HTTPS only: the image's HTTP-to-HTTPS redirect (port 80) isn't needed on a laptop, and 8080 is often taken.
       - "127.0.0.1:${HTTPS_PORT:-8443}:443"
-      - "127.0.0.1:${HTTP_PORT:-8080}:80"
     healthcheck:
       test: ["CMD", "curl", "-fsk", "-o", "/dev/null", "https://localhost/registry/"]
       interval: 10s

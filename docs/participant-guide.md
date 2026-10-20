@@ -53,6 +53,10 @@ The last command downloads the images, starts the containers and waits until eve
 minutes the first time and a few seconds after that (longer on Apple Silicon Macs, which run the Registry under
 emulation). It is done when you get your prompt back and the last lines say `Healthy`.
 
+If you use a WSL terminal (Ubuntu) on Windows instead of PowerShell, run `cd ~` first, so the files live in your
+Linux home folder rather than under `/mnt/c`. If you downloaded the ZIP on macOS or Linux and `./workshop` says
+"permission denied", run `bash workshop` instead.
+
 ### 3. Check that it works
 
 1. Open **<https://localhost:8443/registry/>**. Your browser warns that the connection is not private, because the
@@ -60,6 +64,8 @@ emulation). It is done when you get your prompt back and the last lines say `Hea
    - Chrome or Edge: **Advanced**, then **Proceed to localhost (unsafe)**.
    - Firefox: **Advanced...**, then **Accept the Risk and Continue**.
    - Safari: **Show Details**, then **visit this website**, and confirm.
+   If you see anything other than COmanage (for example "404 Not Found" from nginx, or another application), see
+   [Troubleshooting](#troubleshooting): another program is using port 8443.
 2. Click **Login**. Your browser asks for a username and password: type **`admin`** and leave the password
    **empty**. You should see "This is the COmanage CO, which is used for platform wide configurations."
 3. Open **<http://localhost:8025/>**: the (empty) mailbox of Mailpit, where the Registry's email will arrive.
@@ -132,9 +138,17 @@ it runs.
 
 - **"Cannot connect to the Docker daemon"**, **"error during connect"** or **"The system cannot find the file
   specified"**: Docker isn't running. Start Docker Desktop, wait until it says it is running, and try again.
-- **"port is already allocated"**: another program uses port 8443, 8080 or 8025. Copy `.env.example` to `.env`,
-  change `HTTPS_PORT`, `HTTP_PORT` or `MAILPIT_PORT`, run `docker compose up --wait` again, and use your port in the
-  addresses.
+- **"port is already allocated"**: another program uses port 8443 or 8025. Copy `.env.example` to `.env`, change
+  `HTTPS_PORT` or `MAILPIT_PORT` (for example to 9443 or 9025), run `docker compose up --wait` again, and use your
+  port in the addresses.
+- **<https://localhost:8443/registry/> shows something other than COmanage** (for example "404 Not Found" from
+  nginx), although `docker compose up --wait` said `Healthy`: another program already holds port 8443, such as
+  Docker Desktop's own Kubernetes (with an ingress) or a local web server, and Docker couldn't publish the
+  Registry there. `docker compose port registry 443` then doesn't print `127.0.0.1:8443`. Set another port as
+  above (`HTTPS_PORT=9443` in `.env`), run `docker compose up --wait`, and use <https://localhost:9443/registry/>.
+- **Windows: "An attempt was made to access a socket in a way forbidden by its access permissions"**: Windows has
+  reserved that port (Hyper-V and WSL reserve ranges of ports). `netsh interface ipv4 show excludedportrange
+  protocol=tcp` lists the reserved ranges; pick ports outside them in `.env` as above.
 - **`docker compose up --wait` ends with "unhealthy" or "didn't complete successfully"**: run
   `docker compose logs registry` (or `docker compose logs workshop-setup`) and send the output to the organisers.
   `docker compose down -v` and `docker compose up --wait` starts over.

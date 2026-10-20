@@ -10,6 +10,7 @@
 # Screenshots of every step land in tools/seed/out/. A failing stage stops the run: that procedure needs a look.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
+export MSYS_NO_PATHCONV=1   # Git Bash; on Windows, run the seeder from WSL instead
 first="${1:-01}"
 ui() { tools/seed/pw seed.py "$@"; }
 stage_wanted() { [[ "$1" > "${first}" || "$1" == "${first}" ]]; }
@@ -59,7 +60,7 @@ if stage_wanted 07; then
     # Provisioning and invitations, built on the FileSource state of 04; topics.py checks every step as it goes
     # (it runs on the host and needs python3).
     ./workshop restore 04-filesource-synced
-    python3 tools/seed/topics.py all
+    "${PYTHON:-python3}" tools/seed/topics.py all
     ./workshop checkpoint 07-provisioning-invitation "Redcurrant University (from 04): SqlConnector active; provisioning targets File Export (provisioned/output.jsonl) and SQL Export (target database), Immediate; Ruth Spence in CO:admins; invitation flow 'Invite a Member' and its templates; Casey Invitee enrolled by invitation (plus the test petitions of the trap checks). Restoring it doesn't restore output.jsonl or the target database."
 fi
 ./workshop list

@@ -36,6 +36,9 @@ Participants run the one command above and get a fresh install, plus only what t
 | **File Provisioner output** | `/srv/provisioned/output.jsonl` in the Registry (the File Name to enter), which is `provisioned/output.jsonl` in the folder participants can open on their laptop. 5.2.0 requires the file to exist before the provisioner is saved; the kit creates it, empty. |
 | **SQL Provisioner target** | A separate PostgreSQL database: host `target-database`, port 5432, database `target`, username `target_user`, password `password`. |
 
+If participants edit the CSV files: Windows line endings are fine, but Excel's "CSV UTF-8" format adds a byte-order
+mark that makes every row fail ("Did not find SORID as first defined column"). Use a text editor such as VS Code.
+
 The columns of the CSV files: `SORID`, `names.given.official`, `names.family.official`, `identifiers.identifier.uid`,
 and in `registrar.csv` also `identifiers.identifier.eppn`. Ruth Spence is in `hr.csv`, Lamar Martin in
 `registrar.csv`. If the lesson needs other files, send them: they go into the kit's `filesource` folder and must
@@ -124,6 +127,9 @@ Verified on the kit; click path in the [instructor guide](instructor-guide.md#en
 
 From test runs of the procedures on the kit:
 
+- After saving an email address, or pressing Force Verify, the dialog shows a second copy of the page inside it
+  (5.2.0 behaviour). The change is saved; close the dialog. Force Verify sends no email, so an empty Mailpit is
+  expected there.
 - A pipeline's **Person Status On Create** left blank: every synced person fails. An External Identity Source left
   **Disabled**: the sync throws an error.
 - The full FileSource sync has no button: it is one terminal command, and the source's number comes from the page
@@ -156,7 +162,10 @@ From test runs of the procedures on the kit:
    Servers → Add, then CO Settings; steps in the instructor guide), we'll remove it from the kit's setup step.
 4. **The CSV files**: keep these, or send yours.
 5. **Prerequisites**: the participant guide asks for Docker Desktop (or Docker Engine on Linux) and Git, 8 GB of
-   memory and 5 GB of disk. Docker Desktop needs a paid subscription for professional use at larger organisations
-   and government; worth a line in your material.
+   memory and 5 GB of disk; on Windows, PowerShell is enough. Docker Desktop needs a paid subscription for
+   professional use at larger organisations and government; worth a line in your material. Also worth saying: "do
+   the 'Before the workshop' steps at home and tell us before the day if anything fails". The likeliest snag is
+   another program (or Windows itself) holding port 8443; the fix is a different port in `.env`, in the guide's
+   troubleshooting.
 6. **Time zones**: the Registry shows times in each browser's time zone, so dates in screenshots will differ from
    what participants see.
