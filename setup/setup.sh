@@ -5,6 +5,11 @@
 # the UI during the lesson. Safe to run again: it changes nothing the second time.
 set -euo pipefail
 
+# A Registry database without an SMTP server on the COmanage CO is a fresh one (first start, or after
+# "docker compose down -v"): the File Provisioner's old output then belongs to a database that is gone.
+fresh=$(psql -v ON_ERROR_STOP=1 -Atqc "select count(*) = 0 from servers
+    where co_id = 1 and plugin = 'CoreServer.SmtpServers' and server_id is null and deleted is not true")
+
 echo "workshop-setup: pointing the Registry's outgoing mail at Mailpit"
 psql -v ON_ERROR_STOP=1 -q -f /setup/mail.sql
 
@@ -14,6 +19,10 @@ psql -v ON_ERROR_STOP=1 -q -f /setup/mail.sql
 echo "workshop-setup: preparing provisioned/output.jsonl for the File Provisioner"
 chmod 0777 /provisioned 2> /dev/null || true
 [ -e /provisioned/output.jsonl ] || install -m 0666 /dev/null /provisioned/output.jsonl
+if [ "${fresh}" = t ] && [ -s /provisioned/output.jsonl ]; then
+    echo "workshop-setup: fresh database, so emptying provisioned/output.jsonl"
+    : > /provisioned/output.jsonl
+fi
 if ! gosu 33:33 test -w /provisioned/output.jsonl; then
     echo "workshop-setup: ERROR: the Registry cannot write provisioned/output.jsonl." \
          "On Linux: chmod 0777 provisioned && chmod 0666 provisioned/output.jsonl" >&2

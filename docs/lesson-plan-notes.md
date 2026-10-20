@@ -49,6 +49,7 @@ Only a few things need a terminal. These forms work in macOS Terminal, Windows P
 | To | Command |
 |---|---|
 | Run a full FileSource sync (5.2.0 has no button for it) | `docker compose exec -u www-data -w /srv/comanage-registry/app registry ./bin/cake job -c <CO id> -j CoreJob.SyncJob -s external_identity_source_id=<source id>` |
+| Run queued jobs, for example after Reprovision All | `docker compose exec -u www-data -w /srv/comanage-registry/app registry ./bin/cake job -r -c <CO id>` |
 | Look at the SQL Provisioner's tables | `docker compose exec target-database psql -U target_user -d target`, then `\dt` and `select * from <table>;` |
 | Start over from a fresh install | `docker compose down -v`, then `docker compose up --wait` |
 
@@ -72,14 +73,84 @@ Verified on the kit; click paths in the [instructor guide](instructor-guide.md#f
 - File-sourced people have no login identifier, so they can't log in, unless the pipeline adds one (PipelineToolkit's
   Identifier Mapper flange, see the instructor guide) or an Identifier Assignment marks one as Login.
 
+## Provisioning in 5.2.0 (File and SQL Provisioners)
+
+Verified on the kit; click paths in the instructor guide
+([File](instructor-guide.md#provisioning-file-provisioner), [SQL](instructor-guide.md#provisioning-sql-provisioner)):
+
+- The SQL Provisioner needs a **Server** first (Connections → Related Configurations → Servers, plugin
+  `CoreServer.SqlServers`: Postgres, host `target-database`, database `target`, user `target_user`, password
+  `password`). Saving the SQL Provisioner creates its tables (`sp_people`, `sp_names`, ...) in the target database.
+- **Create provisioning targets with Provisioning Mode Disabled**, fill in the plugin's form (File Name, or Server and
+  prefix), and only then switch to **Immediate**. The default mode is Queue on Error, and a target whose plugin form
+  was never saved makes **every person save in that CO fail with an error page** until the target is fixed or
+  deleted. Worth a warning on the slide.
+- **People already in the Registry are not sent until something about them changes.** A good moment for the lesson:
+  "now change Ruth's title and watch the file / the table update". To send everyone at once, Reprovision All only
+  queues jobs, which need a command (`bin/cake job -r -c <CO id>`, see the instructor guide); per person, there is
+  **Provision Now** on the person's Provisioning Status page (it shows no confirmation message).
+- Each line in `output.jsonl` is a whole person record (about 6.7 KB, with types and groups nested); a person who
+  becomes ineligible (for example their only role expires) is written as just `{"id":45}`.
+- Each person from the HR file has two names in the Registry and in `sp_names`: the primary name and the copy linked
+  to the HR record. Expect the question.
+
+## Invitations in 5.2.0
+
+Verified on the kit; click path in the [instructor guide](instructor-guide.md#enrollment-invitation):
+
+- Petitioner Authorization has only **Any Authenticated User** (self-signup) and **CO Administrator** in 5.2.0. An
+  invitation flow uses CO Administrator.
+- **The platform administrator (`admin`) can't send invitations** in a CO where it isn't a Person: the browser ends
+  in "too many redirects". The inviter has to be a Person in the CO who can log in and is in **CO:admins**. If the
+  FileSource pipeline gives HR people login identifiers (the Identifier Mapper flange in the instructor guide), the
+  quickest is to add Ruth Spence (who then logs in as `ruth.spence`) to CO:admins.
+- **Collect Enrollee Email** must be ticked (it is off by default): the invitation goes to that address.
+- The invitation email is the next step's **Handoff Message Template** (context Enrollment Handoff), set on the
+  step's own form; the link is `(@ENTRY_URL)`.
+- **Invitation Validity is in seconds**, although the label says minutes: the default 1440 expires after 24 minutes.
+  Use 0 (no expiry) in the lesson.
+- **Invitees must open the link in a fresh private window.** Opened in a window that is logged in (say as `admin`),
+  it shows "Permission Denied" and the invitation is now tied to that login; the fix is to terminate the petition
+  and invite again.
+- The invitee accepts, then the login prompt appears: any new username (with an empty password) becomes their login
+  identifier. Afterwards they log in as that name.
+- Declining shows the same "Enrollment Complete ... has been finalized" page as accepting (with a "Invitation
+  Declined" message), and nobody is notified.
+
+## Where participants get stuck
+
+From test runs of the procedures on the kit:
+
+- A pipeline's **Person Status On Create** left blank: every synced person fails. An External Identity Source left
+  **Disabled**: the sync throws an error.
+- The full FileSource sync has no button: it is one terminal command, and the source's number comes from the page
+  address (`external-identity-sources/edit/1`). Show where to find it.
+- Browsers remember logins: one private window per person. "Too many redirects" means "logged in as someone who
+  can't see this page": go back to the home page or open a new private window.
+- A username can sign up or accept an invitation once per database.
+- Creating someone by hand who is also in a file you sync later gives two people. Sync first, or keep them apart.
+- The ids (CO 2-5, source 1, 2, people) only match the slides if participants create things in exactly the order
+  shown; say so, or avoid ids in the text.
+
+## Ideas for slides
+
+- The data flow: CSV file → External Identity Source → Pipeline (matching; a flange can add a login identifier) →
+  Person in the CO → Provisioners → `output.jsonl` and the target database.
+- Why people from a file can't log in unless the pipeline adds a login identifier.
+- What the invitation does: CO admin → email (Mailpit) → invitee accepts and picks a login → new Person.
+- Mailpit as the "fake inbox" where every verification, invitation and welcome mail arrives.
+
 ## Things to decide
 
-1. **Plugins**: activated by participants during the lesson (as now), or already active?
-2. **Anything else that should exist before the first chapter** (a CO, a pipeline...)? The kit's setup step can
+1. **Plugins**: activated by participants during the lesson (as now: FileConnector, SqlConnector, and
+   PipelineToolkit if the pipeline adds login identifiers), or already active?
+2. **Who sends the invitations**: a CO administrator persona is needed (above). Ruth Spence in CO:admins is the
+   simplest; any Person with a login identifier works.
+3. **Anything else that should exist before the first chapter** (a CO, a pipeline...)? The kit's setup step can
    create it, so participants start exactly where the lesson begins.
-3. **The CSV files**: keep these, or send yours.
-4. **Prerequisites**: the participant guide asks for Docker Desktop (or Docker Engine on Linux) and Git, 8 GB of
+4. **The CSV files**: keep these, or send yours.
+5. **Prerequisites**: the participant guide asks for Docker Desktop (or Docker Engine on Linux) and Git, 8 GB of
    memory and 5 GB of disk. Docker Desktop needs a paid subscription for professional use at larger organisations
    and government; worth a line in your material.
-5. **Time zones**: the Registry shows times in each browser's time zone, so dates in screenshots will differ from
+6. **Time zones**: the Registry shows times in each browser's time zone, so dates in screenshots will differ from
    what participants see.

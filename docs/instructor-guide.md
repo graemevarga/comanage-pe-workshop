@@ -35,8 +35,8 @@ worth showing on screen: it is the same command participants would use with thei
 | `provisioned/` | File Provisioner output, at `/srv/provisioned/` in the registry container |
 | `target-database` | SQL Provisioner target: database `target`, user `target_user`, password `password`, port 5432 (`docker compose exec target-database psql -U target_user -d target`) |
 | `./workshop sync <co> <eis>` | Full FileSource sync (command line only in 5.2.0) |
-| `./workshop checkpoint NAME` / `restore NAME` / `reset` | Save and restore the Registry database; `reset` = fresh install |
-| `tools/seed/` | Playwright scripts that walk through procedures in the UI; screenshots of every step land in `tools/seed/out/` |
+| `./workshop checkpoint NAME` / `restore NAME` / `reset` | Save and restore the Registry database; `reset` = fresh install. A restore doesn't roll back what provisioners already wrote to `provisioned/output.jsonl` or the target database; `reset` empties both |
+| `tools/seed/` | Playwright scripts that walk through procedures in the UI (`seed-all.sh`, `topics.py`); screenshots of every step land in `tools/seed/out/` |
 
 ## What participants start with
 
@@ -70,8 +70,10 @@ verified address gives HTTP 500 in 5.2.0); then `./workshop mail-test 1`.
 ### Configuration
 
 1. **Configuration → Platform-Wide Configuration → Plugins**: on the **FileConnector** row, gear menu → **Activate**
-   ("Plugin Activated"). Same for **PipelineToolkit**. Activation applies the plugin's database schema at once.
-   (Command-line equivalent: `./workshop cake plugin -a activate -p FileConnector,PipelineToolkit`.)
+   ("Plugin Activated"). Same for **PipelineToolkit**, and for **SqlConnector** if the lesson uses the SQL
+   Provisioner. Activation applies the plugin's database schema at once. After login, `admin` lands on "Available
+   Collaborations" once other COs exist: pick COmanage to see this menu.
+   (Command-line equivalent: `./workshop cake plugin -a activate -p FileConnector,PipelineToolkit,SqlConnector`.)
 2. **Platform-Wide Configuration → COs → Add a New CO**, in this order so the ids match the course material:
    Discovery TNG ("Discovery TNG Demo CO"), Redcurrant University ("Redcurrant University Person Registry"),
    Guests ("Guest Registry"), MESS ("Medium Energy Synchrotron Source"). Each new CO gets its default Types, the
@@ -128,7 +130,8 @@ Verified working:
    "Process HR File Inputs", System of Record Label `hr`. Saving opens the File Source form: File Name
    **`/srv/filesource/hr.csv`**, File Format **CSV v3**, leave Archive Directory empty.
 4. Full sync, from the command line (5.2.0 has no UI button for it):
-   `./workshop sync 3 1` → `Job 1: OK - Sync Finished (45 new, 0 updated, 0 errors, 45 total)` in a few seconds. The
+   `./workshop sync 3 1` → `Job N: OK - Sync Finished (45 new, 0 updated, 0 errors, 45 total)` in a few seconds
+   (N is the job's id, which counts every job in the Registry, so it is rarely 1). The
    underlying command is
    `docker compose exec -u www-data -w /srv/comanage-registry/app registry ./bin/cake job -c 3 -j CoreJob.SyncJob -s external_identity_source_id=1`
    (always as www-data). Show the result under **Operations → Jobs** and **People → My Population**.
@@ -206,6 +209,101 @@ ticked), an Email Address (Force Verify), and membership of CO:approvers. Then a
 page (a 5.2.0 bug); without it the CO's (or the petition COU's) approvers group is used. The enrollee then waits at
 "handoff", Claude gets an email with the link, approves in his own window, and the enrollee gets the welcome mail.
 
+### Provisioning: File Provisioner
+
+Verified in Redcurrant University after the FileSource procedure (`tools/seed/topics.py`, stage `file`).
+
+1. **Connections → Provisioning Targets → Add a New Provisioning Target**: Description "File Export", Provisioning
+   Mode **Disabled** (the default, Queue on Error, is a trap: see below), Plugin `FileConnector.FileProvisioners`,
+   leave the rest → Save. The "Configure FileProvisioners" page has one field, **File Name**:
+   `/srv/provisioned/output.jsonl` → Save. (A file that doesn't exist is refused: 'The file "..." is not writable';
+   the kit creates this one.)
+2. Back on the target (PROPERTIES tab): Provisioning Mode **Immediate** → Save. Switching writes nothing by itself.
+3. Open `provisioned/output.jsonl` on the laptop (or `tail -f provisioned/output.jsonl`). Every change to a person
+   appends one JSON line per event, the whole person record (names, identifiers, roles, group memberships, with
+   every type and group nested: about 6.7 KB a line). Changing Ruth Spence's role title adds one line; expiring her
+   only role makes her ineligible and writes `{"id":45}`; adding someone to a group also writes the group.
+4. **People already in the Registry are not written until something about them changes.** To push one person:
+   person page → gear by the name → **Provisioning Status** → row gear → **Provision Now** → confirm. There is no
+   flash; Last Status becomes "Provisioned", Last Comment "Wrote 1 record to file". To push everyone:
+   **Provisioning Targets** → row gear → **Reprovision All** (no confirmation; "Reprovisioning for People, Groups
+   queued for File Export (N)"). That only queues two jobs (Operations → Jobs); the kit has no queue runner, so run
+   it: `./workshop cake job -r -c 3`, or from PowerShell
+   `docker compose exec -u www-data -w /srv/comanage-registry/app registry ./bin/cake job -r -c 3`. The People job
+   writes 45 lines ("Reprovisioned 45 entities"); the Groups job reports 0 entities (a 5.2.0 bug).
+
+### Provisioning: SQL Provisioner
+
+Verified after the File Provisioner (`topics.py`, stage `sql`). SqlConnector must be active (Configuration step 1).
+
+1. **Connections → Related Configurations → Servers** (also Configuration → Servers) → **Add a New Server**:
+   Description "Target Database", Status Active, Plugin `CoreServer.SqlServers` → Save → "Configure SqlServers":
+   RDBMS Type **Postgres**, Hostname **`target-database`**, Port empty, Database Name **`target`**, Username
+   **`target_user`**, Password **`password`** → Save.
+2. **Provisioning Targets → Add**: Description "SQL Export", Mode **Disabled**, Plugin `SqlConnector.SqlProvisioners`
+   → Save → "Configure SqlProvisioners": Server **Target Database**, Table Name Prefix `sp_` (the default) → Save.
+   Saving creates 15 tables in the target database (`sp_people`, `sp_names`, `sp_identifiers`, `sp_person_roles`,
+   `sp_groups`, `sp_group_members`, `sp_types`, ...) and copies the reference data (Types, COUs, Groups). The
+   CONFIGURE PLUGIN tab also has **Reapply Target Database Schema** and **Resync Reference Data**.
+3. Set the target's Mode to **Immediate**. Provisioning works as for the file: changes go out at once, Provision Now
+   shows Last Comment "New record published", Reprovision All needs the job run above.
+4. Look at the result: `docker compose exec target-database psql -U target_user -d target`, then `\dt`, and:
+
+   ```sql
+   select p.id, p.status, n.given, n.family, i.identifier as login, r.title
+   from sp_people p join sp_names n on n.person_id = p.id and n.primary_name
+   left join sp_identifiers i on i.person_id = p.id and i.login
+   left join sp_person_roles r on r.person_id = p.id
+   order by n.family, n.given limit 5;
+   ```
+
+   The `sp_` ids are the Registry's ids. Each HR person has two names in `sp_names`, as in the Registry: the primary
+   name and the copy linked to the HR record.
+
+### Enrollment: invitation
+
+Verified in Redcurrant University (`topics.py`, stage `invite`): a CO administrator invites someone by email; the
+invitee accepts from the link in Mailpit, logs in with a new username, and becomes a Person in the CO.
+
+1. **Who invites.** Only Any Authenticated User and **CO Administrator** flows exist in 5.2.0, and an invitation
+   needs CO Administrator. The platform administrator can't start such a flow in a CO where it isn't a Person (the
+   browser ends in "too many redirects"), so the inviter must be a Person in the CO with a login identifier, in
+   CO:admins. With the FileSource procedure done, Ruth Spence is the quickest: **Structure → Groups → CO:admins →
+   GROUP MEMBERS → Add member**, type "Spence", pick Ruth Spence; a "Group Member" dialog opens → Save → close it.
+   Logging in as `ruth.spence` (private window) now shows Redcurrant's full menus.
+2. **Message Templates** (Configuration → Personalization → **Message Templates** → Add), Format Plain Text:
+   - "Redcurrant Invitation", Context **Enrollment Handoff**, Subject `You are invited to join (@CO_NAME)`, body
+     `Hello (@ENROLLEE_NAME), you have been invited to join (@CO_NAME). Open this link to accept: (@ENTRY_URL)`.
+     The link is `(@ENTRY_URL)`; there is no invitation-specific substitution.
+   - "Redcurrant Welcome", Context **Enrollment Finalization**, Subject `Welcome to (@CO_NAME)`, body
+     `Hello (@ENROLLEE_NAME), your enrollment in (@CO_NAME) is complete. You can now log in.`
+3. **People → Enrollment Flows → Add**: Name "Invite a Member", Status Active, Petitioner Authorization **CO
+   Administrator**, tick **Collect Enrollee Email** (off by default; the invitation is sent to this address, not to
+   one collected later), Finalization Message Template "Redcurrant Welcome" → Save.
+4. **Enrollment Flow Steps → Add a New Enrollment Flow Step** (a dialog; Save switches it to the plugin's form, and
+   it stays open after the second Save: close it):
+   1. "Enter invitee details", Plugin `CoreEnroller.BasicAttributeCollectors`, Actor Type **Petitioner**, Order 1;
+      plugin form: Name Type Official, Email Address Type Official, Affiliation Type Member.
+   2. "Accept invitation", Plugin `CoreEnroller.InvitationAccepters`, Actor Type **Enrollee**, **Handoff Message
+      Template "Redcurrant Invitation"** (on the step's own form, not the plugin's), Order 2; plugin form:
+      **Invitation Validity `0`** (no expiry) and a Welcome Message. The validity is in **seconds**, although the
+      label says minutes: the default 1440 expires after 24 minutes.
+   3. "Link your login", Plugin `CoreEnroller.IdentifierCollectors`, Actor Type **Enrollee**, Order 3; plugin form:
+      Type **Network**, and press Save (the step needs its type).
+5. **Run it.** As `ruth.spence`: People → Enrollment Flows → row gear → **Start** → **Enrollee Email**, for example
+   `casey.invitee@redcurrant.example` → Save → step 1: Given Name, Family Name, Email Address → **Continue** →
+   "Enrollment Flow Handoff" ("Thank you for completing this Enrollment Flow Step..."). People → Petitions shows
+   it as Pending Acceptance.
+6. In Mailpit, "You are invited to join Redcurrant University" has the link
+   (`https://localhost:8443/registry/petitions/continue/N?token=...`). **Copy it into a new private window** that
+   isn't logged in → "Accept this invitation?" → **Accept** → **Continue** → the login prompt: a new username, for
+   example `casey.invitee`, empty password → "Enrollment Complete", flash "Petition Finalized", and the welcome mail
+   arrives. `casey.invitee` now has a Network login identifier and lands on Redcurrant's dashboard. If the
+   provisioners are Immediate, Casey is in `output.jsonl` and `sp_people` straight away.
+
+Decline instead: the page still says "Enrollment Complete ... has been finalized" with the flash "Invitation
+Declined"; the petition is Declined and nobody is mailed.
+
 ## Laura's CSV files
 
 - Put them in `filesource/` (mounted read-only at `/srv/filesource/`). Edits are live: the file is re-read on every
@@ -230,8 +328,10 @@ Laura won't be in the room, so check every procedure in the lesson plan on a fre
 
 `tools/seed/` automates this: `seed.py` has one function per stage that drives the same screens with Playwright (in
 a container; nothing to install), and `seed-all.sh` runs the stages from a fresh install and saves a checkpoint after
-each. The current stages follow the procedures above; rewrite them to follow the lesson plan, and the run doubles as
-a regression test when Laura revises it. Screenshots of every step land in `tools/seed/out/`.
+each. `topics.py all --restore` then checks the provisioning and invitation procedures from checkpoint 04 (about 8
+minutes; it prints CONFIRMED or REFUTED for each behaviour this guide relies on). The current stages follow the
+procedures above; rewrite them to follow the lesson plan, and the run doubles as a regression test when Laura revises
+it. Screenshots of every step land in `tools/seed/out/`.
 
 ## Known 5.2.0 traps
 
@@ -251,10 +351,19 @@ a regression test when Laura revises it. Screenshots of every step land in `tool
 | A step that changes actor without a Handoff Message Template stops the flow | Always set one on approval steps |
 | A notification recipient without a verified email → HTTP 500 for the enrollee | Force-verify approvers' email first |
 | Basic credentials are cached by the browser | Private windows, or `127.0.0.1` vs `localhost`, per persona |
+| A provisioning target whose plugin form (File Name, Server) was never saved, in any mode but Disabled → **every person save in the CO returns HTTP 500** | Create targets as Disabled, configure the plugin, then switch to Immediate. To remove a broken one: target → PROPERTIES → Delete |
+| People already in the Registry aren't provisioned | They go out when they change; or Provision Now per person; or Reprovision All plus `./workshop cake job -r -c <co_id>` |
+| Reprovision All's Groups job reports "0 entities" | 5.2.0 bug; groups still go out when they or their members change |
+| `admin` starting a CO Administrator flow → too many redirects | Invite as a CO administrator who is a Person in the CO (e.g. Ruth Spence in CO:admins) |
+| Invitation Validity is in seconds (the label says minutes) | `0` for no expiry; it is checked when the invitee replies, so raising it revives an expired invitation |
+| Opening an invitation link in a logged-in browser → 403, and the petition is now bound to that user | Always open invitation links in a fresh private window. Recover: People → Petitions → View → Terminate, and invite again |
+| Reopening a used (accepted or declined) invitation link → HTTP 500 | Expected; the petition is complete |
+| "Add member" and "Add a New Enrollment Flow Step" dialogs stay open after Save | Close them with X |
 
 ## When something goes wrong
 
 - `docker compose ps` (health), `docker compose logs registry | grep -v ' debug: '` (web requests and start-up),
   `./workshop psql` (database). `COMANAGE_DEBUG=1` on the registry service shows the entrypoint's start-up output
   (and turns on CakePHP debug mode).
-- Lost the plot: `./workshop restore <checkpoint>` (one you saved). Start over: `./workshop reset`.
+- Lost the plot: `./workshop restore <checkpoint>` (one you saved; provisioner output isn't rolled back). Start
+  over: `./workshop reset`.

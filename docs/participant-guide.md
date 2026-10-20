@@ -4,6 +4,9 @@ In the workshop you run your own COmanage Registry PE 5.2.0 on your laptop and f
 delivered: the Registry container the upstream build script produces, PostgreSQL, and a mail catcher (Mailpit), all
 started with one command. Nothing is shared with other participants, and you can start over at any time.
 
+This guide is about getting the kit ready and running. The exercises themselves are in the workshop's lesson plan
+and slides.
+
 > **Demo only.** In the workshop Registry, anyone who can reach it can log in as its administrator, so it is only
 > reachable from your own laptop (127.0.0.1). Don't change that, and don't put real people's data in it.
 
@@ -116,6 +119,7 @@ Run them in the `comanage-pe-workshop` folder. They work the same in Terminal, P
 | Pause (your work is kept) | `docker compose stop` |
 | Start over from a fresh install | `docker compose down -v`, then `docker compose up --wait` |
 | Run a full FileSource sync (the lesson gives you the numbers) | `docker compose exec -u www-data -w /srv/comanage-registry/app registry ./bin/cake job -c <CO id> -j CoreJob.SyncJob -s external_identity_source_id=<source id>` |
+| Run queued jobs (for example after Reprovision All) | `docker compose exec -u www-data -w /srv/comanage-registry/app registry ./bin/cake job -r -c <CO id>` |
 | Look at the SQL Provisioner's tables | `docker compose exec target-database psql -U target_user -d target` (then `\dt`, and `\q` to quit) |
 | See the Registry's log | `docker compose logs registry` |
 
@@ -132,6 +136,10 @@ it runs.
 - **`docker compose up --wait` ends with "unhealthy" or "didn't complete successfully"**: run
   `docker compose logs registry` (or `docker compose logs workshop-setup`) and send the output to the organisers.
   `docker compose down -v` and `docker compose up --wait` starts over.
+- **Linux: the `registry` container never becomes healthy**, although `registry-database` is: a host firewall
+  (firewalld, ufw, or rules added by other software) may be blocking traffic between containers. Restart Docker
+  (`sudo systemctl restart docker`) so it re-creates its firewall rules, then `docker compose up --wait`; if that
+  doesn't help, see Docker's [packet filtering and firewalls](https://docs.docker.com/engine/network/packet-filtering-firewalls/).
 - **Downloads fail** (for example "denied" or a timeout from `ghcr.io`): a VPN or corporate proxy may block GitHub's
   container registry. Try again off the VPN or on another network.
 - **Apple Silicon: "The requested image's platform (linux/amd64) does not match the detected host platform"**:

@@ -59,6 +59,16 @@ with sync_playwright() as pw:
     r2 = Registry(pw, user=USER, prefix=f"v-enroll-{USER}-after-")
     r2.login()
     r2.go("cos/select")
-    print("after enrollment, COs:", [a.inner_text().strip() for a in r2.page.locator("main table a").all()])
     r2.shot("cos")
+    # Someone in a single CO is sent straight to that CO's dashboard; otherwise the page lists their COs.
+    landed = re.search(r"[?&]co_id=(\d+)", r2.page.url)
+    if landed:
+        print("after enrollment: lands on the dashboard of CO", landed.group(1))
+        if landed.group(1) != "2":
+            raise RegistryError(f"{USER} landed in CO {landed.group(1)}, not Discovery TNG (2)")
+    else:
+        cos = [a.inner_text().strip() for a in r2.page.locator("main table a").all()]
+        print("after enrollment, COs:", cos)
+        if not any("Discovery TNG" in c for c in cos):
+            raise RegistryError(f"{USER} is not in Discovery TNG after enrolling")
     r2.close()
