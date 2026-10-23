@@ -103,6 +103,9 @@ docker compose up --wait
 Then open <https://localhost:8443/registry/> and log in as `admin` (empty password). If the organisers announce an
 update to the workshop files, run `git pull` before `docker compose up --wait`.
 
+The workshop slides, with the step-by-step settings for each hands-on part, are at
+<https://bit.ly/comanage-pe-workshop-slides>. Keep them open beside the Registry as you work.
+
 ## What's in your Registry
 
 A fresh install, plus only what the lesson needs around it. You build everything else yourself during the lesson.
